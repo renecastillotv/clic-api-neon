@@ -342,22 +342,38 @@ function buildHomepageSections(
     sections.push({
       type: 'advisors',
       title: getTranslatedText('Nuestro Equipo', 'Our Team', 'Notre Équipe', language),
-      advisors: advisors.map((a: any) => ({
-        slug: a.slug,
-        name: `${a.nombre} ${a.apellido}`.trim(),
-        avatar: a.foto_url || a.avatar_url,
-        bio: a.biografia,
-        description: a.biografia,
-        position: a.titulo_profesional || getTranslatedText('Asesor Inmobiliario', 'Real Estate Advisor', 'Conseiller Immobilier', language),
-        properties_count: parseInt(a.propiedades_count || '0', 10),
-        yearsExperience: a.experiencia_anos || 0,
-        totalSales: parseInt(a.ventas_totales || '0', 10),
-        clientSatisfaction: a.satisfaccion_cliente || 4.8,
-        languages: a.idiomas || ['Español'],
-        phone: a.telefono,
-        whatsapp: a.whatsapp || a.telefono,
-        url: utils.buildUrl(`/asesores/${a.slug}`, language, trackingString)
-      }))
+      advisors: advisors.map((a: any) => {
+        const yearsExp = parseInt(a.experiencia_anos || '0', 10);
+        const totalSales = parseInt(a.ventas_totales || '0', 10);
+        const satisfaction = parseFloat(a.satisfaccion_cliente || '4.8');
+        const propsCount = parseInt(a.propiedades_count || '0', 10);
+
+        return {
+          id: a.id || a.perfil_id || a.usuario_id,
+          slug: a.slug,
+          name: `${a.nombre || ''} ${a.apellido || ''}`.trim() || 'Asesor',
+          avatar: a.foto_url || a.avatar_url || null,
+          bio: a.biografia || '',
+          description: a.biografia || '',
+          position: a.titulo_profesional || getTranslatedText('Asesor Inmobiliario', 'Real Estate Advisor', 'Conseiller Immobilier', language),
+          // Stats como objeto (lo que usa HomepageLayout)
+          stats: {
+            yearsExperience: yearsExp,
+            totalSales: totalSales,
+            clientSatisfaction: satisfaction,
+            propertiesCount: propsCount
+          },
+          // También como campos directos (por compatibilidad)
+          yearsExperience: yearsExp,
+          totalSales: totalSales,
+          clientSatisfaction: satisfaction,
+          properties_count: propsCount,
+          languages: a.idiomas ? (Array.isArray(a.idiomas) ? a.idiomas : [a.idiomas]) : ['Español'],
+          phone: a.telefono,
+          whatsapp: a.whatsapp || a.telefono,
+          url: utils.buildUrl(`/asesores/${a.slug}`, language, trackingString)
+        };
+      })
     });
   }
 

@@ -37,6 +37,13 @@ export async function handleAdvisorsList(options: {
   // Generar SEO
   const seo = generateAdvisorsListSEO(language, tenant, total);
 
+  // Calcular estadísticas agregadas para el frontend
+  const totalExperience = processedAdvisors.reduce((sum, a) => sum + (a.stats?.yearsExperience || 0), 0);
+  const totalSalesAll = processedAdvisors.reduce((sum, a) => sum + (a.stats?.totalSales || 0), 0);
+  const avgSatisfaction = processedAdvisors.length > 0
+    ? (processedAdvisors.reduce((sum, a) => sum + (a.stats?.clientSatisfaction || 4.8), 0) / processedAdvisors.length).toFixed(1)
+    : '4.8';
+
   return {
     type: 'advisors-list',
     language,
@@ -45,6 +52,13 @@ export async function handleAdvisorsList(options: {
     trackingString,
     advisors: processedAdvisors,
     totalAdvisors: total,
+    // Stats agregados que espera el frontend (AdvisorsLayout líneas 104-110)
+    stats: {
+      totalAdvisors: total,
+      totalExperience: totalExperience,
+      totalSales: totalSalesAll,
+      averageSatisfaction: avgSatisfaction
+    },
     pagination: {
       page,
       limit,
@@ -190,18 +204,21 @@ function processAdvisor(
   raw: Record<string, any>,
   language: string,
   trackingString: string
-): Advisor {
-  // Procesar bio
-  let bio = raw.bio;
-  if (typeof bio === 'object' && bio !== null) {
-    // Ya es un objeto con traducciones
-  } else if (typeof bio === 'string') {
-    bio = { es: bio };
-  } else {
-    bio = { es: '' };
+): any {
+  // El frontend espera campos específicos como 'name', 'avatar', 'position', 'stats'
+  // Adaptamos la respuesta para que coincida
+
+  // Procesar bio - obtener string según idioma
+  let bioText = '';
+  if (typeof raw.biografia === 'string') {
+    bioText = raw.biografia;
+  } else if (typeof raw.bio === 'object' && raw.bio !== null) {
+    bioText = raw.bio[language] || raw.bio.es || '';
+  } else if (typeof raw.bio === 'string') {
+    bioText = raw.bio;
   }
 
-  // Procesar arrays
+  // Procesar arrays (especialidades, idiomas)
   const parseArray = (value: any): string[] => {
     if (Array.isArray(value)) return value;
     if (typeof value === 'string') {
@@ -215,39 +232,80 @@ function processAdvisor(
     return [];
   };
 
+  const specialties = parseArray(raw.especialidades || raw.specialties);
+  const languages = parseArray(raw.idiomas || raw.languages) || ['Español'];
+
+  // Nombre completo
+  const fullName = raw.full_name || `${raw.nombre || ''} ${raw.apellido || ''}`.trim() || 'Asesor';
+
+  // Construir URL del asesor
+  const advisorUrl = utils.buildUrl(`/asesores/${raw.slug}`, language, trackingString);
+
+  // Stats del asesor
+  const propertiesCount = parseInt(raw.propiedades_count || raw.properties_count || '0', 10);
+  const yearsExperience = parseInt(raw.experiencia_anos || raw.years_experience || '0', 10);
+  const totalSales = parseInt(raw.ventas_totales || raw.total_sales || '0', 10);
+  const clientSatisfaction = parseFloat(raw.satisfaccion_cliente || raw.client_satisfaction || '4.8');
+
   return {
-    id: raw.id,
+    // IDs y slugs
+    id: raw.id || raw.perfil_id || raw.usuario_id,
     slug: raw.slug,
     created_at: raw.created_at,
     updated_at: raw.updated_at,
 
+    // CAMPOS QUE ESPERA EL FRONTEND
+    name: fullName,  // El frontend usa 'name', no 'full_name'
+    avatar: raw.foto_url || raw.avatar_url || raw.avatar || raw.photo_url || null,  // El frontend usa 'avatar'
+    position: raw.titulo_profesional || raw.position || (language === 'es' ? 'Asesor Inmobiliario' : language === 'en' ? 'Real Estate Advisor' : 'Conseiller Immobilier'),
+    bio: bioText,
+    description: bioText, // Alias para compatibilidad
+
+    // Campos originales (para compatibilidad hacia atrás)
     first_name: raw.nombre,
     last_name: raw.apellido,
-    full_name: `${raw.nombre || ''} ${raw.apellido || ''}`.trim(),
+    full_name: fullName,
+    photo_url: raw.foto_url || raw.avatar_url || raw.avatar || null,
 
+    // Contacto
     email: raw.email,
-    phone: raw.telefono,
-    whatsapp: raw.telefono,
+    phone: raw.telefono || raw.phone,
+    whatsapp: raw.whatsapp || raw.telefono || raw.phone,
 
-    photo_url: raw.avatar,
-    bio,
+    // Arrays
+    specialties: specialties,
+    languages: languages.length > 0 ? languages : ['Español'],
+    certifications: parseArray(raw.certificaciones || raw.certifications),
 
-    specialties: [],
-    languages: [],
-    certifications: [],
-
+    // STATS - estructura que espera el frontend
     stats: {
-      properties_count: parseInt(raw.propiedades_count || '0', 10),
-      sales_count: 0,
-      years_experience: 0
+      properties_count: propertiesCount,
+      propertiesCount: propertiesCount,  // Alias
+      activeListings: propertiesCount,   // Alias
+      sales_count: totalSales,
+      totalSales: totalSales,            // Alias
+      years_experience: yearsExperience,
+      yearsExperience: yearsExperience,  // Alias - LO QUE USA EL FRONTEND
+      clientSatisfaction: clientSatisfaction,  // LO QUE USA EL FRONTEND
+      client_satisfaction: clientSatisfaction
     },
 
-    social: {},
+    // Social links
+    social: {
+      instagram: raw.instagram,
+      facebook: raw.facebook,
+      linkedin: raw.linkedin,
+      youtube: raw.youtube,
+      tiktok: raw.tiktok
+    },
 
+    // Estados
     active: raw.activo !== false,
-    is_featured: raw.es_owner || false,
+    featured: raw.destacado || raw.es_owner || false,
+    is_featured: raw.destacado || raw.es_owner || false,
 
-    url: utils.buildUrl(`/asesores/${raw.slug}`, language, trackingString)
+    // URL del perfil
+    url: advisorUrl
   };
 }
 
