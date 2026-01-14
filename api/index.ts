@@ -202,34 +202,40 @@ export default async function handler(request: Request): Promise<Response> {
         break;
 
       case 'articles':
-        response = await contentHandler.handleArticles({
-          tenant,
-          slug: segments.length > 1 ? segments[segments.length - 1] : undefined,
-          categorySlug: segments.length === 2 && !isArticleSlug(segments[1]) ? segments[1] : undefined,
+        // Artículos no implementados en el schema actual
+        response = {
+          pageType: 'articles-main',
           language,
+          tenant,
+          seo: utils.generateSEO({
+            title: 'Artículos',
+            description: 'Artículos sobre bienes raíces',
+            language,
+          }),
           trackingString,
-          page,
-          limit,
-        });
+          articles: [],
+        } as any;
         break;
 
       case 'videos':
-        response = await contentHandler.handleVideos({
-          tenant,
-          slug: segments.length > 1 ? segments[segments.length - 1] : undefined,
-          categorySlug: segments.length === 2 && !isVideoSlug(segments[1]) ? segments[1] : undefined,
+        // Videos no implementados en el schema actual
+        response = {
+          pageType: 'videos-main',
           language,
+          tenant,
+          seo: utils.generateSEO({
+            title: 'Videos',
+            description: 'Videos sobre bienes raíces',
+            language,
+          }),
           trackingString,
-          page,
-          limit,
-        });
+          videos: [],
+        } as any;
         break;
 
       case 'testimonials':
         response = await contentHandler.handleTestimonials({
           tenant,
-          slug: segments.length > 1 ? segments[segments.length - 1] : undefined,
-          categorySlug: segments.length === 2 ? segments[1] : undefined,
           language,
           trackingString,
           page,
@@ -525,16 +531,6 @@ function looksLikePropertySlug(slug: string): boolean {
     return true;
   }
   return false;
-}
-
-async function isArticleSlug(slug: string): Promise<boolean> {
-  // Verificar si el slug corresponde a un artículo
-  // Por ahora, asumir que si tiene más de 20 caracteres es un artículo
-  return slug.length > 20;
-}
-
-async function isVideoSlug(slug: string): Promise<boolean> {
-  return slug.length > 20;
 }
 
 function build404Response(tenant: TenantConfig, language: string, trackingString: string): Error404Response {
