@@ -142,10 +142,26 @@ export async function handlePropertyList(options: {
     db.getTestimonials(tenant.id, 5)
   ]);
 
-  // Respuesta en formato Supabase
+  // Obtener ubicaciones populares para hotItems
+  const popularLocations = await db.getPopularLocations(tenant.id);
+
+  // Respuesta en formato Supabase - incluye campos a nivel raíz para compatibilidad con frontend
   return {
     type: 'property-list',
     available: true,
+    // Campos a nivel raíz para compatibilidad con PropertyListLayout
+    properties,
+    totalProperties: pagination.total_items,
+    pagination: {
+      page: pagination.page,
+      limit: pagination.limit,
+      total_properties: pagination.total_items,
+      total_pages: pagination.total_pages,
+      has_next_page: pagination.has_next,
+      has_prev_page: pagination.has_prev
+    },
+    tags: searchTags,
+    // searchResults también para compatibilidad con Supabase format
     searchResults: {
       properties,
       tags: searchTags,
@@ -186,6 +202,24 @@ export async function handlePropertyList(options: {
         tag_related_count: faqs.length + testimonials.length,
         default_count: 0
       }
+    },
+    // hotItems para PopularLocations component
+    hotItems: {
+      cities: popularLocations.cities.map((c: any) => ({
+        slug: c.slug,
+        title: c.name,
+        url: utils.buildUrl(`/comprar/${c.slug}`, language, trackingString),
+        count: parseInt(c.count, 10)
+      })),
+      sectors: popularLocations.sectors.map((s: any) => ({
+        slug: s.slug,
+        title: s.name,
+        url: utils.buildUrl(`/comprar/${s.slug}`, language, trackingString),
+        count: parseInt(s.count, 10)
+      })),
+      properties: properties.slice(0, 6),
+      agents: [],
+      projects: []
     },
     referralAgent: null,
     breadcrumbs,
