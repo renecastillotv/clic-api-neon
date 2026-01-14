@@ -98,44 +98,52 @@ export async function handleSingleAdvisor(options: {
   const perfilId = rawAdvisor.perfil_id || rawAdvisor.id;
   const usuarioId = rawAdvisor.usuario_id || rawAdvisor.id;
 
-  const properties = await sql`
-    SELECT
-      p.id,
-      p.slug,
-      p.codigo,
-      p.titulo,
-      p.tipo,
-      p.operacion,
-      p.precio,
-      p.precio_venta,
-      p.precio_alquiler,
-      p.moneda,
-      p.moneda_venta,
-      p.moneda_alquiler,
-      p.ciudad,
-      p.sector,
-      p.provincia,
-      p.direccion,
-      p.habitaciones,
-      p.banos,
-      p.estacionamientos,
-      p.m2_construccion,
-      p.m2_terreno,
-      p.imagen_principal,
-      p.destacada,
-      p.created_at
-    FROM propiedades p
-    WHERE (
-      p.perfil_asesor_id = ${perfilId}
-      OR p.captador_id = ${usuarioId}
-      OR p.agente_id = ${usuarioId}
-    )
-      AND p.tenant_id = ${tenant.id}
-      AND p.activo = true
-      AND p.estado_propiedad = 'disponible'
-    ORDER BY p.destacada DESC, p.created_at DESC
-    LIMIT 12
-  `;
+  // Query con try-catch para debugging
+  let properties: any[] = [];
+  try {
+    const result = await sql`
+      SELECT
+        p.id,
+        p.slug,
+        p.codigo,
+        p.titulo,
+        p.tipo,
+        p.operacion,
+        p.precio,
+        p.precio_venta,
+        p.precio_alquiler,
+        p.moneda,
+        p.moneda_venta,
+        p.moneda_alquiler,
+        p.ciudad,
+        p.sector,
+        p.provincia,
+        p.direccion,
+        p.habitaciones,
+        p.banos,
+        p.estacionamientos,
+        p.m2_construccion,
+        p.m2_terreno,
+        p.imagen_principal,
+        p.destacada,
+        p.created_at
+      FROM propiedades p
+      WHERE (
+        p.perfil_asesor_id::text = ${String(perfilId)}
+        OR p.captador_id::text = ${String(usuarioId)}
+        OR p.agente_id::text = ${String(usuarioId)}
+      )
+        AND p.tenant_id = ${tenant.id}
+        AND p.activo = true
+        AND p.estado_propiedad = 'disponible'
+      ORDER BY p.destacada DESC, p.created_at DESC
+      LIMIT 12
+    `;
+    properties = Array.isArray(result) ? result : [];
+  } catch (err) {
+    console.error('[SingleAdvisor] Error fetching properties:', err);
+    properties = [];
+  }
 
   const propertyCards = (properties as any[]).map(p => toPropertyCard(p, language, trackingString));
 
