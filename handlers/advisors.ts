@@ -137,10 +137,11 @@ export async function handleSingleAdvisor(options: {
     LIMIT 12
   `;
 
-  const propertyCards = properties.map(p => toPropertyCard(p, language, trackingString));
+  const propertyCards = (properties as any[]).map(p => toPropertyCard(p, language, trackingString));
 
   // Obtener testimonios del tenant (no hay relación directa asesor-testimonio en mock_testimonios)
-  const testimonials = await db.getTestimonials(tenant.id, 6);
+  const rawTestimonials = await db.getTestimonials(tenant.id, 6);
+  const testimonials = Array.isArray(rawTestimonials) ? rawTestimonials : [];
 
   // Generar SEO
   const seo = generateSingleAdvisorSEO(advisor, language, tenant, propertyCards.length);
