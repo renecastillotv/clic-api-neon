@@ -372,7 +372,10 @@ export default async function handler(request: Request): Promise<Response> {
     const duration = Date.now() - startTime;
     console.log(`[API] Response in ${duration}ms | type: ${response.type}`);
 
-    return jsonResponse(response);
+    // Enriquecer respuesta con globalConfig y country
+    const enrichedResponse = enrichResponse(response, tenant, language, trackingString);
+
+    return jsonResponse(enrichedResponse);
 
   } catch (error) {
     console.error('[API] Error:', error);
@@ -581,4 +584,232 @@ function jsonResponse(data: any, status: number = 200): Response {
       ...corsHeaders,
     },
   });
+}
+
+// ============================================================================
+// GLOBAL CONFIG - Estructura compatible con Supabase
+// ============================================================================
+
+function buildGlobalConfig(tenant: TenantConfig, language: string): any {
+  return {
+    country: tenant.regional.country_code,
+    language,
+    legal: {
+      company_name: tenant.name,
+      company_full_name: tenant.legal.company_name,
+      founded: '2022',
+      logo_url: tenant.branding.logo_url || 'https://pacewqgypevfgjmdsorz.supabase.co/storage/v1/object/public/public-assets/clic%20logo%20on.png',
+      rnc: tenant.legal.company_id || ''
+    },
+    contact: {
+      phone: tenant.contact.phone || '8094872542',
+      whatsapp: tenant.contact.whatsapp || '8295148080',
+      email: tenant.contact.email || 'info@clicinmobiliaria.com',
+      address: tenant.contact.address || 'Calle Erik Leonard Ekman No. 34, Edificio The Box Working Space, Distrito Nacional'
+    },
+    office: {
+      name: 'Oficina Principal',
+      hours: {
+        weekdays: 'Lun-Vie: 9:00-18:00',
+        saturday: 'Sáb: 9:00-15:00',
+        sunday: 'Dom: Cerrado'
+      }
+    },
+    social: {
+      company: tenant.social || {
+        facebook: 'https://www.facebook.com/ClicInmobiliaria/',
+        instagram: '@clic.do',
+        instagram_url: 'https://www.instagram.com/clic.do/',
+        youtube: 'https://www.youtube.com/@clicinmobiliaria',
+        linkedin: 'https://www.linkedin.com/company/clic-inmobiliaria',
+        tiktok: '@clic.do',
+        tiktok_url: 'https://www.tiktok.com/@clic.do'
+      },
+      founder: {
+        name: 'René Castillo',
+        instagram: '@renecastillotv',
+        instagram_url: 'https://www.instagram.com/renecastillotv/',
+        facebook: 'https://www.facebook.com/renecastillotv',
+        tiktok: '@renecastillo.tv',
+        tiktok_url: 'https://www.tiktok.com/@renecastillo.tv',
+        followers: '600000+'
+      }
+    },
+    team: {
+      founder_experience: '6 años en Inmobiliaria',
+      team_experience: '+10 años experiencia'
+    },
+    seo: {
+      company_rating: '4.9/5',
+      founder_followers: '600K+',
+      youtube_subscribers: '200K+'
+    },
+    certifications: [
+      {
+        name: 'AEI',
+        description: 'Miembro de la Asociación de Empresas Inmobiliarias',
+        logo: 'https://pacewqgypevfgjmdsorz.supabase.co/storage/v1/object/public/public-assets/logo-aei.png'
+      }
+    ],
+    features: {
+      header: {
+        sections: {
+          buy: {
+            enabled: true,
+            order: 1,
+            labels: { es: 'Comprar', en: 'Buy', fr: 'Acheter' },
+            urls: { es: '/comprar', en: '/en/buy', fr: '/fr/acheter' }
+          },
+          rent: {
+            enabled: true,
+            order: 2,
+            labels: { es: 'Alquilar', en: 'Rent', fr: 'Louer' },
+            urls: { es: '/alquilar', en: '/en/rent', fr: '/fr/louer' }
+          },
+          sell: {
+            enabled: true,
+            order: 3,
+            labels: { es: 'Vender', en: 'Sell', fr: 'Vendre' },
+            urls: { es: '/vender', en: '/en/sell', fr: '/fr/vendre' }
+          },
+          advisors: {
+            enabled: true,
+            order: 4,
+            labels: { es: 'Asesores', en: 'Advisors', fr: 'Conseillers' },
+            urls: { es: '/asesores', en: '/en/advisors', fr: '/fr/conseillers' }
+          },
+          videos: {
+            enabled: true,
+            order: 5,
+            labels: { es: 'Videos', en: 'Videos', fr: 'Vidéos' },
+            urls: { es: '/videos', en: '/en/videos', fr: '/fr/videos' }
+          },
+          articles: {
+            enabled: true,
+            order: 6,
+            labels: { es: 'Blog', en: 'Blog', fr: 'Articles' },
+            urls: { es: '/articulos', en: '/en/articles', fr: '/fr/articles' }
+          },
+          contact: {
+            enabled: true,
+            order: 7,
+            labels: { es: 'Contacto', en: 'Contact', fr: 'Contact' },
+            urls: { es: '/contacto', en: '/en/contact', fr: '/fr/contact' }
+          }
+        }
+      },
+      footer: {
+        company_info: true,
+        experience_badges: true,
+        founder_social: true,
+        properties_by_zone: true,
+        resources: true,
+        services: true,
+        social_links: true
+      },
+      cta: {
+        phone: true,
+        whatsapp: true,
+        email: true,
+        schedule: true
+      }
+    },
+    footer_links: {
+      properties_by_zone: [
+        { label: 'Santo Domingo', url: '/comprar/santo-domingo' },
+        { label: 'Punta Cana', url: '/comprar/punta-cana' },
+        { label: 'Santiago', url: '/comprar/santiago' },
+        { label: 'La Romana', url: '/comprar/la-romana' },
+        { label: 'Puerto Plata', url: '/comprar/puerto-plata' },
+        { label: 'Samaná', url: '/comprar/samana' },
+        { label: 'Bávaro', url: '/comprar/bavaro' }
+      ],
+      services: [
+        { label: 'Compra', url: '/comprar' },
+        { label: 'Venta', url: '/vender' },
+        { label: 'Alquiler', url: '/alquilar' },
+        { label: 'Asesoría', url: '/asesores' }
+      ],
+      resources: [
+        { label: 'Blog', url: '/articulos' },
+        { label: 'Videos', url: '/videos' },
+        { label: 'Testimonios', url: '/testimonios' },
+        { label: 'Preguntas Frecuentes', url: '/faqs' },
+        { label: 'Contacto', url: '/contacto' }
+      ],
+      testimonials: {
+        urls: { es: '/testimonios', en: '/en/testimonials', fr: '/fr/temoignages' }
+      }
+    },
+    translations: {
+      header: {
+        buy: 'Comprar',
+        rent: 'Alquilar',
+        sell: 'Vender',
+        advisors: 'Asesores',
+        videos: 'Videos',
+        articles: 'Artículos',
+        contact: 'Contacto'
+      },
+      footer: {
+        aboutUs: 'Sobre Nosotros',
+        contact: 'Contacto',
+        followUs: 'Síguenos',
+        mainOffice: 'Oficina Principal',
+        officeHours: 'Horarios de Oficina',
+        ourServices: 'Nuestros Servicios',
+        propertiesByZone: 'Propiedades por Zona',
+        resources: 'Recursos',
+        rights: '© 2024 CLIC DOM SRL. Todos los derechos reservados.'
+      },
+      cta: {
+        needHelp: '¿Necesitas Ayuda Personalizada?',
+        expertsWillHelp: 'Nuestros asesores expertos te guiarán para encontrar la propiedad perfecta que se ajuste a tu presupuesto y necesidades',
+        talkToAdvisor: 'Hablar con Asesor',
+        callNow: 'Llamar Ahora',
+        scheduleAppointment: 'Programar Cita'
+      }
+    }
+  };
+}
+
+// ============================================================================
+// COUNTRY DATA - Estructura compatible con Supabase
+// ============================================================================
+
+function buildCountryData(tenant: TenantConfig): any {
+  return {
+    id: tenant.id,
+    name: 'República Dominicana',
+    code: tenant.regional.country_code || 'DOM',
+    currency: tenant.regional.currency_default || 'USD',
+    timezone: tenant.regional.timezone || 'America/Santo_Domingo',
+    subdomain: tenant.domain,
+    custom_domain: `https://${tenant.domain}`,
+    country_tag_id: null,
+    tags: {
+      id: null,
+      slug: 'republica-dominicana',
+      slug_en: 'dominican-republic',
+      slug_fr: 'republique-dominicaine',
+      category: 'pais',
+      display_name: 'República Dominicana',
+      display_name_en: 'Dominican Republic',
+      display_name_fr: 'République Dominicaine'
+    }
+  };
+}
+
+// ============================================================================
+// ENRICH RESPONSE - Agrega globalConfig y country a todas las respuestas
+// ============================================================================
+
+function enrichResponse(response: any, tenant: TenantConfig, language: string, trackingString: string): any {
+  return {
+    ...response,
+    globalConfig: buildGlobalConfig(tenant, language),
+    country: buildCountryData(tenant),
+    language,
+    trackingString
+  };
 }
