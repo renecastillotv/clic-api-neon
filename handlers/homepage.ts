@@ -1,5 +1,6 @@
 // api/handlers/homepage.ts
 // Handler para la página de inicio
+// Adaptado al schema real de Neon
 
 import db from '../lib/db';
 import utils from '../lib/utils';
@@ -21,27 +22,22 @@ export async function handleHomepage(options: {
   trackingString: string;
 }): Promise<HomepageResponse> {
   const { tenant, language, trackingString } = options;
-  const sql = db.getSQL();
 
-  // Obtener datos en paralelo
+  // Obtener datos en paralelo usando las funciones de db.ts
   const [
-    heroSection,
     featuredProperties,
-    hotItems,
-    searchTags,
+    popularLocations,
     quickStats,
     testimonials,
     advisors,
-    recentContent
+    faqs
   ] = await Promise.all([
-    getHeroSection(tenant.id, language),
-    getFeaturedProperties(tenant.id, language, trackingString),
-    getHotItems(tenant.id, language, trackingString),
-    getSearchTags(tenant.id, language),
-    getQuickStats(tenant.id),
-    getFeaturedTestimonials(tenant.id, language),
-    getFeaturedAdvisors(tenant.id, language, trackingString),
-    getRecentContent(tenant.id, language, trackingString)
+    db.getFeaturedProperties(tenant.id, 12),
+    db.getPopularLocations(tenant.id),
+    db.getQuickStats(tenant.id),
+    db.getTestimonials(tenant.id, 6),
+    db.getAdvisors(tenant.id, 4),
+    db.getFAQs({ tenantId: tenant.id, limit: 6 })
   ]);
 
   // Construir secciones
@@ -50,7 +46,7 @@ export async function handleHomepage(options: {
   // Hero section
   sections.push({
     type: 'hero',
-    data: heroSection
+    data: getHeroSection(tenant, language)
   });
 
   // Property carousel
@@ -59,7 +55,7 @@ export async function handleHomepage(options: {
       type: 'property-carousel',
       data: {
         title: getTranslatedText('Propiedades Destacadas', 'Featured Properties', 'Propriétés en Vedette', language),
-        properties: featuredProperties
+        properties: featuredProperties.map(p => toPropertyCard(p, language, trackingString))
       }
     });
   }
@@ -70,7 +66,15 @@ export async function handleHomepage(options: {
       type: 'testimonials',
       data: {
         title: getTranslatedText('Lo que dicen nuestros clientes', 'What our clients say', 'Ce que disent nos clients', language),
-        testimonials
+        testimonials: testimonials.map(t => ({
+          id: t.id,
+          content: t.content,
+          rating: t.rating || 5,
+          client_name: t.client_name,
+          client_photo: t.client_photo,
+          client_location: t.client_location,
+          property_type: t.property_type
+        }))
       }
     });
   }
@@ -81,36 +85,59 @@ export async function handleHomepage(options: {
       type: 'advisors',
       data: {
         title: getTranslatedText('Nuestro Equipo', 'Our Team', 'Notre Équipe', language),
-        advisors
-      }
-    });
-  }
-
-  // Content mix (articles + videos)
-  if (recentContent.articles.length > 0 || recentContent.videos.length > 0) {
-    sections.push({
-      type: 'content-mix',
-      data: {
-        articles: recentContent.articles,
-        videos: recentContent.videos
+        advisors: advisors.map((a: any) => ({
+          slug: a.slug,
+          name: `${a.nombre} ${a.apellido}`.trim(),
+          avatar: a.avatar,
+          bio: a.bio,
+          properties_count: parseInt(a.propiedades_count || '0', 10),
+          url: utils.buildUrl(`/asesores/${a.slug}`, language, trackingString)
+        }))
       }
     });
   }
 
   // FAQs
-  const faqs = await db.getFAQs({ tenantId: tenant.id, context: 'general', limit: 6 });
   if (faqs.length > 0) {
     sections.push({
       type: 'faq',
       data: {
         title: getTranslatedText('Preguntas Frecuentes', 'Frequently Asked Questions', 'Questions Fréquentes', language),
         faqs: faqs.map(f => ({
-          question: utils.getTranslatedField(f, 'question', language),
-          answer: utils.getTranslatedField(f, 'answer', language)
+          question: f.question,
+          answer: f.answer,
+          category: f.category
         }))
       }
     });
   }
+
+  // Construir hotItems
+  const hotItems: HotItems = {
+    cities: popularLocations.cities.map((c: any) => ({
+      slug: c.slug,
+      title: c.name,
+      url: utils.buildUrl(`/comprar/${c.slug}`, language, trackingString),
+      count: parseInt(c.count, 10)
+    })),
+    sectors: popularLocations.sectors.map((s: any) => ({
+      slug: s.slug,
+      title: s.name,
+      url: utils.buildUrl(`/comprar/${s.slug}`, language, trackingString),
+      count: parseInt(s.count, 10)
+    })),
+    properties: featuredProperties.slice(0, 6).map(p => toPropertyCard(p, language, trackingString)),
+    agents: advisors.slice(0, 4).map((a: any) => ({
+      slug: a.slug,
+      name: `${a.nombre} ${a.apellido}`.trim(),
+      photo_url: a.avatar,
+      url: utils.buildUrl(`/asesores/${a.slug}`, language, trackingString)
+    })),
+    projects: [] // No hay tabla de proyectos en el schema actual
+  };
+
+  // Construir searchTags
+  const searchTags = buildSearchTags(popularLocations, language);
 
   // Generar SEO
   const seo = generateHomepageSEO(tenant, language);
@@ -132,18 +159,9 @@ export async function handleHomepage(options: {
 // FUNCIONES AUXILIARES
 // ============================================================================
 
-async function getHeroSection(tenantId: number, language: string) {
-  const sql = db.getSQL();
-
-  // Obtener configuración del hero desde la BD o usar defaults
-  const config = await sql`
-    SELECT configuracion
-    FROM tenants
-    WHERE id = ${tenantId}
-  `;
-
-  const tenantConfig = config[0]?.configuracion || {};
-  const heroConfig = tenantConfig.homepage?.hero || {};
+function getHeroSection(tenant: TenantConfig, language: string) {
+  const config = tenant.config || {};
+  const heroConfig = config.homepage?.hero || {};
 
   const titles = {
     es: heroConfig.title_es || 'Encuentra tu hogar ideal',
@@ -165,375 +183,74 @@ async function getHeroSection(tenantId: number, language: string) {
   };
 }
 
-async function getFeaturedProperties(
-  tenantId: number,
-  language: string,
-  trackingString: string
-): Promise<PropertyCard[]> {
-  const sql = db.getSQL();
-
-  const properties = await sql`
-    SELECT
-      p.*,
-      cp.nombre as categoria_nombre,
-      cp.slug as categoria_slug,
-      s.nombre as sector_nombre,
-      s.slug as sector_slug,
-      c.nombre as ciudad_nombre,
-      c.slug as ciudad_slug
-    FROM propiedades p
-    LEFT JOIN categorias_propiedades cp ON p.categoria_id = cp.id
-    LEFT JOIN ubicaciones s ON p.sector_id = s.id
-    LEFT JOIN ubicaciones c ON p.ciudad_id = c.id
-    WHERE p.tenant_id = ${tenantId}
-      AND p.estado = 'disponible'
-      AND p.destacada = true
-    ORDER BY p.created_at DESC
-    LIMIT 12
-  `;
-
-  return properties.map(p => utils.toPropertyCard(p, language, trackingString));
-}
-
-async function getHotItems(
-  tenantId: number,
-  language: string,
-  trackingString: string
-): Promise<HotItems> {
-  const sql = db.getSQL();
-
-  // Obtener ciudades populares
-  const cities = await sql`
-    SELECT
-      u.slug,
-      u.nombre as name,
-      COUNT(p.id) as count
-    FROM ubicaciones u
-    JOIN propiedades p ON p.ciudad_id = u.id
-    WHERE u.tenant_id = ${tenantId}
-      AND u.activo = true
-      AND u.tipo = 'ciudad'
-      AND p.estado = 'disponible'
-    GROUP BY u.id, u.slug, u.nombre
-    HAVING COUNT(p.id) >= 3
-    ORDER BY count DESC
-    LIMIT 8
-  `;
-
-  // Obtener sectores populares
-  const sectors = await sql`
-    SELECT
-      u.slug,
-      u.nombre as name,
-      COUNT(p.id) as count
-    FROM ubicaciones u
-    JOIN propiedades p ON p.sector_id = u.id
-    WHERE u.tenant_id = ${tenantId}
-      AND u.activo = true
-      AND u.tipo = 'sector'
-      AND p.estado = 'disponible'
-    GROUP BY u.id, u.slug, u.nombre
-    HAVING COUNT(p.id) >= 2
-    ORDER BY count DESC
-    LIMIT 8
-  `;
-
-  // Obtener agentes destacados
-  const agents = await sql`
-    SELECT
-      u.slug,
-      CONCAT(u.nombre, ' ', u.apellido) as name,
-      u.avatar as photo_url
-    FROM usuarios u
-    LEFT JOIN perfiles_asesor pa ON u.id = pa.usuario_id
-    WHERE u.tenant_id = ${tenantId}
-      AND u.activo = true
-      AND u.rol IN ('asesor', 'admin', 'gerente')
-      AND pa.destacado = true
-    ORDER BY u.nombre
-    LIMIT 4
-  `;
-
-  // Obtener proyectos
-  const projects = await sql`
-    SELECT
-      slug,
-      nombre as name,
-      imagen_principal as image
-    FROM proyectos
-    WHERE tenant_id = ${tenantId}
-      AND activo = true
-    ORDER BY destacado DESC, created_at DESC
-    LIMIT 4
-  `;
-
-  // Obtener propiedades nuevas
-  const newProperties = await sql`
-    SELECT
-      p.*,
-      cp.nombre as categoria_nombre,
-      cp.slug as categoria_slug,
-      s.nombre as sector_nombre,
-      s.slug as sector_slug,
-      c.nombre as ciudad_nombre,
-      c.slug as ciudad_slug
-    FROM propiedades p
-    LEFT JOIN categorias_propiedades cp ON p.categoria_id = cp.id
-    LEFT JOIN ubicaciones s ON p.sector_id = s.id
-    LEFT JOIN ubicaciones c ON p.ciudad_id = c.id
-    WHERE p.tenant_id = ${tenantId}
-      AND p.estado = 'disponible'
-      AND p.created_at > NOW() - INTERVAL '30 days'
-    ORDER BY p.created_at DESC
-    LIMIT 6
-  `;
-
-  const operationSlugs = {
-    es: 'comprar',
-    en: 'buy',
-    fr: 'acheter'
-  };
-  const opSlug = operationSlugs[language as keyof typeof operationSlugs] || 'comprar';
+function toPropertyCard(prop: any, language: string, trackingString: string): PropertyCard {
+  const price = prop.precio_venta || prop.precio_alquiler || prop.precio || 0;
+  const currency = prop.moneda || 'USD';
+  const operationType = prop.operacion || (prop.precio_venta ? 'venta' : 'alquiler');
 
   return {
-    cities: cities.map(c => ({
-      slug: c.slug,
-      title: c.name,
-      url: utils.buildUrl(`/${opSlug}/${c.slug}`, language, trackingString),
-      count: parseInt(c.count, 10)
-    })),
-    sectors: sectors.map(s => ({
-      slug: s.slug,
-      title: s.name,
-      url: utils.buildUrl(`/${opSlug}/${s.slug}`, language, trackingString),
-      count: parseInt(s.count, 10)
-    })),
-    properties: newProperties.map(p => utils.toPropertyCard(p, language, trackingString)),
-    agents: agents.map(a => ({
-      slug: a.slug,
-      name: a.name,
-      photo_url: a.photo_url,
-      url: utils.buildUrl(`/asesores/${a.slug}`, language, trackingString)
-    })),
-    projects: projects.map(p => ({
-      slug: p.slug,
-      name: p.name,
-      image: p.image,
-      url: utils.buildUrl(`/proyectos/${p.slug}`, language, trackingString)
-    }))
+    id: prop.id,
+    slug: prop.slug,
+    code: prop.codigo,
+    title: prop.titulo,
+    location: {
+      city: prop.ciudad,
+      sector: prop.sector,
+      address: prop.direccion
+    },
+    price: {
+      amount: price,
+      currency: currency,
+      display: utils.formatPrice(price, currency, operationType, language)
+    },
+    operation_type: operationType,
+    features: {
+      bedrooms: prop.habitaciones || 0,
+      bathrooms: prop.banos || 0,
+      half_bathrooms: prop.medios_banos || 0,
+      parking_spaces: prop.estacionamientos || 0,
+      area_construction: prop.m2_construccion || 0,
+      area_total: prop.m2_terreno || 0
+    },
+    main_image: prop.imagen_principal || '',
+    is_featured: prop.destacada || false,
+    is_new: prop.created_at ? new Date(prop.created_at) > new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) : false,
+    url: utils.buildPropertyUrl(prop, language, trackingString),
+    amenity_badges: []
   };
 }
 
-async function getSearchTags(tenantId: number, language: string) {
-  const sql = db.getSQL();
-
-  // Obtener categorías de propiedades
-  const categories = await sql`
-    SELECT id, slug, nombre as name, nombre_en, nombre_fr
-    FROM categorias_propiedades
-    WHERE tenant_id = ${tenantId} AND activo = true
-    ORDER BY nombre
-  `;
-
-  // Obtener ubicaciones jerárquicas
-  const locations = await sql`
-    SELECT id, slug, nombre as name, tipo as type, parent_id
-    FROM ubicaciones
-    WHERE tenant_id = ${tenantId} AND activo = true
-    ORDER BY tipo, nombre
-  `;
-
-  // Organizar ubicaciones por tipo
-  const provincias = locations.filter(l => l.type === 'provincia');
-  const ciudades = locations.filter(l => l.type === 'ciudad');
-  const sectores = locations.filter(l => l.type === 'sector');
-
-  // Construir jerarquía
-  const locationHierarchy = provincias.map(prov => ({
-    ...prov,
-    name: utils.getTranslatedField(prov, 'name', language),
-    children: ciudades
-      .filter(c => c.parent_id === prov.id)
-      .map(city => ({
-        ...city,
-        name: utils.getTranslatedField(city, 'name', language),
-        children: sectores.filter(s => s.parent_id === city.id).map(sector => ({
-          ...sector,
-          name: utils.getTranslatedField(sector, 'name', language)
-        }))
-      }))
-  }));
+function buildSearchTags(popularLocations: { cities: any[]; sectors: any[] }, language: string) {
+  // Tipos de propiedad estáticos
+  const propertyTypes = [
+    { id: 1, slug: 'casa', name: language === 'en' ? 'House' : 'Casa' },
+    { id: 2, slug: 'apartamento', name: language === 'en' ? 'Apartment' : 'Apartamento' },
+    { id: 3, slug: 'local', name: language === 'en' ? 'Commercial' : 'Local' },
+    { id: 4, slug: 'terreno', name: language === 'en' ? 'Land' : 'Terreno' },
+    { id: 5, slug: 'oficina', name: language === 'en' ? 'Office' : 'Oficina' },
+    { id: 6, slug: 'penthouse', name: 'Penthouse' },
+    { id: 7, slug: 'villa', name: 'Villa' }
+  ];
 
   return {
     tags: {
-      tipo: categories.map(c => ({
-        id: c.id,
+      tipo: propertyTypes,
+      ciudad: popularLocations.cities.map((c: any, index: number) => ({
+        id: index + 1,
         slug: c.slug,
-        name: utils.getTranslatedField(c, 'name', language)
+        name: c.name
       })),
-      provincia: provincias.map(p => ({ id: p.id, slug: p.slug, name: p.name })),
-      ciudad: ciudades.map(c => ({ id: c.id, slug: c.slug, name: c.name })),
-      sector: sectores.map(s => ({ id: s.id, slug: s.slug, name: s.name }))
+      sector: popularLocations.sectors.map((s: any, index: number) => ({
+        id: index + 1,
+        slug: s.slug,
+        name: s.name
+      }))
     },
-    locationHierarchy,
+    locationHierarchy: [], // Simplificado - no hay jerarquía en el schema actual
     currencies: {
       available: ['USD', 'DOP'],
       default: 'USD'
     }
-  };
-}
-
-async function getQuickStats(tenantId: number) {
-  const sql = db.getSQL();
-
-  const stats = await sql`
-    SELECT
-      COUNT(*) FILTER (WHERE estado = 'disponible') as total_properties,
-      COUNT(*) FILTER (WHERE estado = 'disponible' AND precio_venta IS NOT NULL) as for_sale,
-      COUNT(*) FILTER (WHERE estado = 'disponible' AND precio_alquiler IS NOT NULL) as for_rent,
-      COUNT(*) FILTER (WHERE estado = 'disponible' AND created_at > NOW() - INTERVAL '30 days') as new_this_month
-    FROM propiedades
-    WHERE tenant_id = ${tenantId}
-  `;
-
-  const s = stats[0] || {};
-
-  return {
-    total_properties: parseInt(s.total_properties || '0', 10),
-    for_sale: parseInt(s.for_sale || '0', 10),
-    for_rent: parseInt(s.for_rent || '0', 10),
-    new_this_month: parseInt(s.new_this_month || '0', 10)
-  };
-}
-
-async function getFeaturedTestimonials(tenantId: number, language: string) {
-  const sql = db.getSQL();
-
-  const testimonials = await sql`
-    SELECT
-      t.id,
-      t.contenido as content,
-      t.calificacion as rating,
-      t.nombre_cliente as client_name,
-      t.foto_cliente as client_photo,
-      t.ubicacion_cliente as client_location,
-      u.nombre as advisor_name,
-      u.avatar as advisor_photo
-    FROM testimonios t
-    LEFT JOIN usuarios u ON t.asesor_id = u.id
-    WHERE t.tenant_id = ${tenantId}
-      AND t.estado = 'aprobado'
-      AND t.destacado = true
-    ORDER BY t.created_at DESC
-    LIMIT 6
-  `;
-
-  return testimonials.map(t => ({
-    id: t.id,
-    content: t.content,
-    rating: t.rating || 5,
-    client_name: t.client_name,
-    client_photo: t.client_photo,
-    client_location: t.client_location,
-    advisor: t.advisor_name ? {
-      name: t.advisor_name,
-      photo_url: t.advisor_photo
-    } : undefined
-  }));
-}
-
-async function getFeaturedAdvisors(tenantId: number, language: string, trackingString: string) {
-  const sql = db.getSQL();
-
-  const advisors = await sql`
-    SELECT
-      u.slug,
-      u.nombre as first_name,
-      u.apellido as last_name,
-      CONCAT(u.nombre, ' ', u.apellido) as name,
-      u.avatar,
-      pa.bio,
-      pa.idiomas as languages,
-      pa.especialidades as specialties
-    FROM usuarios u
-    LEFT JOIN perfiles_asesor pa ON u.id = pa.usuario_id
-    WHERE u.tenant_id = ${tenantId}
-      AND u.activo = true
-      AND u.rol IN ('asesor', 'admin', 'gerente')
-      AND pa.destacado = true
-    ORDER BY u.nombre
-    LIMIT 4
-  `;
-
-  return advisors.map(a => {
-    let languages = a.languages;
-    if (typeof languages === 'string') {
-      try { languages = JSON.parse(languages); } catch { languages = []; }
-    }
-
-    let specialties = a.specialties;
-    if (typeof specialties === 'string') {
-      try { specialties = JSON.parse(specialties); } catch { specialties = []; }
-    }
-
-    return {
-      slug: a.slug,
-      name: a.name,
-      avatar: a.avatar,
-      bio: a.bio,
-      languages: Array.isArray(languages) ? languages : [],
-      specialties: Array.isArray(specialties) ? specialties : [],
-      url: utils.buildUrl(`/asesores/${a.slug}`, language, trackingString)
-    };
-  });
-}
-
-async function getRecentContent(tenantId: number, language: string, trackingString: string) {
-  const sql = db.getSQL();
-
-  const [articles, videos] = await Promise.all([
-    sql`
-      SELECT
-        id, slug, titulo as title, titulo_en, titulo_fr,
-        extracto as excerpt, imagen_destacada as image,
-        fecha_publicacion as published_at
-      FROM articulos
-      WHERE tenant_id = ${tenantId}
-        AND estado = 'publicado'
-      ORDER BY fecha_publicacion DESC
-      LIMIT 3
-    `,
-    sql`
-      SELECT
-        id, slug, titulo as title, titulo_en, titulo_fr,
-        thumbnail, video_url, duracion as duration
-      FROM videos
-      WHERE tenant_id = ${tenantId}
-        AND estado = 'publicado'
-      ORDER BY fecha_publicacion DESC
-      LIMIT 3
-    `
-  ]);
-
-  return {
-    articles: articles.map(a => ({
-      id: a.id,
-      slug: a.slug,
-      title: utils.getTranslatedField(a, 'title', language),
-      excerpt: a.excerpt,
-      image: a.image,
-      published_at: a.published_at,
-      url: utils.buildUrl(`/articulos/${a.slug}`, language, trackingString)
-    })),
-    videos: videos.map(v => ({
-      id: v.id,
-      slug: v.slug,
-      title: utils.getTranslatedField(v, 'title', language),
-      thumbnail: v.thumbnail,
-      video_url: v.video_url,
-      duration: v.duration,
-      url: utils.buildUrl(`/videos/${v.slug}`, language, trackingString)
-    }))
   };
 }
 

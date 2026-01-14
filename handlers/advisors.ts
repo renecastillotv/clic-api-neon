@@ -1,5 +1,6 @@
 // api/handlers/advisors.ts
 // Handler para asesores inmobiliarios
+// Adaptado al schema real de Neon
 
 import db from '../lib/db';
 import utils from '../lib/utils';
@@ -24,57 +25,14 @@ export async function handleAdvisorsList(options: {
   limit: number;
 }): Promise<AdvisorsListResponse> {
   const { tenant, language, trackingString, page, limit } = options;
-  const sql = db.getSQL();
-  const offset = (page - 1) * limit;
 
-  // Obtener asesores activos
-  const advisors = await sql`
-    SELECT
-      u.id,
-      u.slug,
-      u.nombre as first_name,
-      u.apellido as last_name,
-      CONCAT(u.nombre, ' ', u.apellido) as full_name,
-      u.email,
-      u.telefono as phone,
-      u.whatsapp,
-      u.avatar as photo_url,
-      u.activo as active,
-      pa.bio,
-      pa.especialidades as specialties,
-      pa.idiomas as languages,
-      pa.certificaciones as certifications,
-      pa.redes_sociales as social,
-      pa.estadisticas as stats,
-      pa.destacado as is_featured,
-      (
-        SELECT COUNT(*)
-        FROM propiedad_asesores pas
-        JOIN propiedades p ON pas.propiedad_id = p.id
-        WHERE pas.asesor_id = u.id AND p.estado = 'disponible'
-      ) as properties_count
-    FROM usuarios u
-    LEFT JOIN perfiles_asesor pa ON u.id = pa.usuario_id
-    WHERE u.tenant_id = ${tenant.id}
-      AND u.activo = true
-      AND u.rol IN ('asesor', 'admin', 'gerente')
-    ORDER BY pa.destacado DESC NULLS LAST, properties_count DESC, u.nombre
-    LIMIT ${limit} OFFSET ${offset}
-  `;
-
-  // Contar total
-  const countResult = await sql`
-    SELECT COUNT(*) as total
-    FROM usuarios u
-    WHERE u.tenant_id = ${tenant.id}
-      AND u.activo = true
-      AND u.rol IN ('asesor', 'admin', 'gerente')
-  `;
-
-  const total = parseInt(countResult[0]?.total || '0', 10);
+  // Usar la función de db.ts para obtener asesores
+  const advisors = await db.getAdvisors(tenant.id, limit);
 
   // Procesar asesores
-  const processedAdvisors = advisors.map(a => processAdvisor(a, language, trackingString));
+  const processedAdvisors = advisors.map((a: any) => processAdvisor(a, language, trackingString));
+
+  const total = advisors.length;
 
   // Generar SEO
   const seo = generateAdvisorsListSEO(language, tenant, total);
@@ -111,7 +69,7 @@ export async function handleSingleAdvisor(options: {
   const { tenant, advisorSlug, language, trackingString } = options;
   const sql = db.getSQL();
 
-  // Obtener asesor
+  // Obtener asesor usando la función de db.ts
   const rawAdvisor = await db.getAdvisorBySlug(advisorSlug, tenant.id);
 
   if (!rawAdvisor) {
@@ -121,71 +79,43 @@ export async function handleSingleAdvisor(options: {
   // Procesar asesor
   const advisor = processAdvisor(rawAdvisor, language, trackingString);
 
-  // Obtener propiedades del asesor
+  // Obtener propiedades del asesor - adaptado al schema real
   const properties = await sql`
     SELECT
-      p.*,
-      cp.nombre as categoria_nombre,
-      cp.slug as categoria_slug,
-      s.nombre as sector_nombre,
-      s.slug as sector_slug,
-      c.nombre as ciudad_nombre,
-      c.slug as ciudad_slug
+      p.id,
+      p.slug,
+      p.codigo,
+      p.titulo,
+      p.tipo,
+      p.operacion,
+      p.precio,
+      p.precio_venta,
+      p.precio_alquiler,
+      p.moneda,
+      p.ciudad,
+      p.sector,
+      p.direccion,
+      p.habitaciones,
+      p.banos,
+      p.estacionamientos,
+      p.m2_construccion,
+      p.m2_terreno,
+      p.imagen_principal,
+      p.destacada,
+      p.created_at
     FROM propiedades p
-    JOIN propiedad_asesores pa ON p.id = pa.propiedad_id
-    LEFT JOIN categorias_propiedades cp ON p.categoria_id = cp.id
-    LEFT JOIN ubicaciones s ON p.sector_id = s.id
-    LEFT JOIN ubicaciones c ON p.ciudad_id = c.id
-    WHERE pa.asesor_id = ${rawAdvisor.id}
+    WHERE p.agente_id = ${rawAdvisor.id}
       AND p.tenant_id = ${tenant.id}
-      AND p.estado = 'disponible'
+      AND p.activo = true
+      AND p.estado_propiedad = 'disponible'
     ORDER BY p.destacada DESC, p.created_at DESC
     LIMIT 12
   `;
 
-  const propertyCards: PropertyCard[] = properties.map(p =>
-    utils.toPropertyCard(p, language, trackingString)
-  );
+  const propertyCards: PropertyCard[] = properties.map(p => toPropertyCard(p, language, trackingString));
 
-  // Obtener testimonios del asesor
-  const testimonials = await sql`
-    SELECT
-      t.id,
-      t.slug,
-      t.contenido as content,
-      t.calificacion as rating,
-      t.nombre_cliente as client_name,
-      t.foto_cliente as client_photo,
-      t.ubicacion_cliente as client_location,
-      t.tipo_transaccion as transaction_type,
-      t.destacado as is_featured,
-      t.created_at
-    FROM testimonios t
-    WHERE t.asesor_id = ${rawAdvisor.id}
-      AND t.tenant_id = ${tenant.id}
-      AND t.estado = 'aprobado'
-    ORDER BY t.destacado DESC, t.created_at DESC
-    LIMIT 6
-  `;
-
-  // Obtener contenido relacionado (artículos del asesor)
-  const relatedArticles = await sql`
-    SELECT
-      a.id,
-      a.slug,
-      a.titulo as title,
-      a.titulo_en,
-      a.titulo_fr,
-      a.extracto as excerpt,
-      a.imagen_destacada as featured_image,
-      a.fecha_publicacion as published_at
-    FROM articulos a
-    WHERE a.autor_id = ${rawAdvisor.id}
-      AND a.tenant_id = ${tenant.id}
-      AND a.estado = 'publicado'
-    ORDER BY a.fecha_publicacion DESC
-    LIMIT 3
-  `;
+  // Obtener testimonios del tenant (no hay relación directa asesor-testimonio en mock_testimonios)
+  const testimonials = await db.getTestimonials(tenant.id, 6);
 
   // Generar SEO
   const seo = generateSingleAdvisorSEO(advisor, language, tenant, propertyCards.length);
@@ -200,28 +130,16 @@ export async function handleSingleAdvisor(options: {
     properties: propertyCards,
     testimonials: testimonials.map(t => ({
       id: t.id,
-      slug: t.slug,
-      created_at: t.created_at,
-      updated_at: t.created_at,
       content: { es: t.content },
       rating: t.rating || 5,
       client_name: t.client_name,
       client_photo: t.client_photo,
       client_location: t.client_location,
-      transaction_type: t.transaction_type,
       status: 'approved' as const,
       is_featured: t.is_featured || false
     })),
     relatedContent: {
-      articles: relatedArticles.map(a => ({
-        id: a.id,
-        slug: a.slug,
-        title: utils.getTranslatedField(a, 'title', language),
-        excerpt: a.excerpt,
-        featured_image: a.featured_image,
-        published_at: a.published_at,
-        url: utils.buildUrl(`/articulos/${a.slug}`, language, trackingString)
-      })),
+      articles: [],
       videos: []
     }
   };
@@ -231,12 +149,49 @@ export async function handleSingleAdvisor(options: {
 // FUNCIONES AUXILIARES
 // ============================================================================
 
+function toPropertyCard(prop: any, language: string, trackingString: string): PropertyCard {
+  const price = prop.precio_venta || prop.precio_alquiler || prop.precio || 0;
+  const currency = prop.moneda || 'USD';
+  const operationType = prop.operacion || (prop.precio_venta ? 'venta' : 'alquiler');
+
+  return {
+    id: prop.id,
+    slug: prop.slug,
+    code: prop.codigo,
+    title: prop.titulo,
+    location: {
+      city: prop.ciudad,
+      sector: prop.sector,
+      address: prop.direccion
+    },
+    price: {
+      amount: price,
+      currency: currency,
+      display: utils.formatPrice(price, currency, operationType, language)
+    },
+    operation_type: operationType,
+    features: {
+      bedrooms: prop.habitaciones || 0,
+      bathrooms: prop.banos || 0,
+      half_bathrooms: prop.medios_banos || 0,
+      parking_spaces: prop.estacionamientos || 0,
+      area_construction: prop.m2_construccion || 0,
+      area_total: prop.m2_terreno || 0
+    },
+    main_image: prop.imagen_principal || '',
+    is_featured: prop.destacada || false,
+    is_new: prop.created_at ? new Date(prop.created_at) > new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) : false,
+    url: utils.buildPropertyUrl(prop, language, trackingString),
+    amenity_badges: []
+  };
+}
+
 function processAdvisor(
   raw: Record<string, any>,
   language: string,
   trackingString: string
 ): Advisor {
-  // Procesar bio multilingüe
+  // Procesar bio
   let bio = raw.bio;
   if (typeof bio === 'object' && bio !== null) {
     // Ya es un objeto con traducciones
@@ -244,26 +199,6 @@ function processAdvisor(
     bio = { es: bio };
   } else {
     bio = { es: '' };
-  }
-
-  // Procesar estadísticas
-  let stats = raw.stats || raw.estadisticas;
-  if (typeof stats === 'string') {
-    try {
-      stats = JSON.parse(stats);
-    } catch {
-      stats = {};
-    }
-  }
-
-  // Procesar redes sociales
-  let social = raw.social || raw.redes_sociales;
-  if (typeof social === 'string') {
-    try {
-      social = JSON.parse(social);
-    } catch {
-      social = {};
-    }
   }
 
   // Procesar arrays
@@ -286,38 +221,31 @@ function processAdvisor(
     created_at: raw.created_at,
     updated_at: raw.updated_at,
 
-    first_name: raw.first_name || raw.nombre,
-    last_name: raw.last_name || raw.apellido,
-    full_name: raw.full_name || `${raw.nombre} ${raw.apellido}`.trim(),
+    first_name: raw.nombre,
+    last_name: raw.apellido,
+    full_name: `${raw.nombre || ''} ${raw.apellido || ''}`.trim(),
 
     email: raw.email,
-    phone: raw.phone || raw.telefono,
-    whatsapp: raw.whatsapp,
+    phone: raw.telefono,
+    whatsapp: raw.telefono,
 
-    photo_url: raw.photo_url || raw.avatar,
+    photo_url: raw.avatar,
     bio,
 
-    specialties: parseArray(raw.specialties || raw.especialidades),
-    languages: parseArray(raw.languages || raw.idiomas),
-    certifications: parseArray(raw.certifications || raw.certificaciones),
+    specialties: [],
+    languages: [],
+    certifications: [],
 
     stats: {
-      properties_count: parseInt(raw.properties_count || stats?.properties_count || '0', 10),
-      sales_count: stats?.sales_count || stats?.ventas_count || 0,
-      years_experience: stats?.years_experience || stats?.anos_experiencia || 0,
-      rating: stats?.rating || stats?.calificacion
+      properties_count: parseInt(raw.propiedades_count || '0', 10),
+      sales_count: 0,
+      years_experience: 0
     },
 
-    social: {
-      instagram: social?.instagram,
-      facebook: social?.facebook,
-      linkedin: social?.linkedin,
-      twitter: social?.twitter,
-      youtube: social?.youtube
-    },
+    social: {},
 
-    active: raw.active !== false && raw.activo !== false,
-    is_featured: raw.is_featured || raw.destacado || false,
+    active: raw.activo !== false,
+    is_featured: raw.es_owner || false,
 
     url: utils.buildUrl(`/asesores/${raw.slug}`, language, trackingString)
   };
@@ -374,19 +302,19 @@ function generateSingleAdvisorSEO(
   const descriptions = {
     es: bioText
       ? bioText.substring(0, 150)
-      : `${advisor.full_name}, asesor inmobiliario con ${propertiesCount} propiedades activas. ${specialtiesText ? `Especializado en: ${specialtiesText}` : ''}`,
+      : `${advisor.full_name}, asesor inmobiliario con ${propertiesCount} propiedades activas.`,
     en: bioText
       ? bioText.substring(0, 150)
-      : `${advisor.full_name}, real estate advisor with ${propertiesCount} active properties. ${specialtiesText ? `Specialized in: ${specialtiesText}` : ''}`,
+      : `${advisor.full_name}, real estate advisor with ${propertiesCount} active properties.`,
     fr: bioText
       ? bioText.substring(0, 150)
-      : `${advisor.full_name}, conseiller immobilier avec ${propertiesCount} propriétés actives. ${specialtiesText ? `Spécialisé en: ${specialtiesText}` : ''}`
+      : `${advisor.full_name}, conseiller immobilier avec ${propertiesCount} propriétés actives.`
   };
 
   return utils.generateSEO({
     title: `${titles[language as keyof typeof titles]} | ${tenant.name}`,
     description: descriptions[language as keyof typeof descriptions],
-    keywords: `${advisor.full_name}, asesor inmobiliario, ${specialtiesText}`,
+    keywords: `${advisor.full_name}, asesor inmobiliario`,
     canonicalUrl: advisor.url,
     ogImage: advisor.photo_url,
     language,

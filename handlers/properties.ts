@@ -1,5 +1,6 @@
 // api/handlers/properties.ts
 // Handler para propiedades - lista y detalle individual
+// Adaptado al schema real de Neon
 
 import db from '../lib/db';
 import utils from '../lib/utils';
@@ -26,14 +27,13 @@ export async function handlePropertyList(options: {
   searchParams: URLSearchParams;
 }): Promise<PropertyListResponse> {
   const { tenant, tags, language, trackingString, page, limit, searchParams } = options;
-  const sql = db.getSQL();
 
   // Parsear filtros desde tags y query params
-  const filters = await parseFiltersFromTags(tenant.id, tags, language, searchParams);
+  const filters = parseFiltersFromTags(tags, searchParams);
 
   console.log('[Properties Handler] Filters parsed:', filters);
 
-  // Obtener propiedades
+  // Obtener propiedades usando db.getProperties
   const { properties: rawProperties, pagination } = await db.getProperties({
     tenantId: tenant.id,
     filters,
@@ -44,25 +44,11 @@ export async function handlePropertyList(options: {
 
   // Convertir a PropertyCard
   const properties: PropertyCard[] = rawProperties.map(prop =>
-    utils.toPropertyCard(prop, language, trackingString)
+    toPropertyCard(prop, language, trackingString)
   );
 
-  // Agregar amenity badges si hay propiedades
-  if (properties.length > 0) {
-    const propertyIds = rawProperties.map(p => p.id);
-    const amenitiesMap = await getAmenitiesForProperties(propertyIds);
-
-    properties.forEach((card, index) => {
-      const propAmenities = amenitiesMap.get(rawProperties[index].id) || [];
-      card.amenity_badges = propAmenities.slice(0, 2).map(a => ({
-        text: utils.getTranslatedField(a, 'name', language),
-        icon: a.icon
-      }));
-    });
-  }
-
   // Calcular estadísticas agregadas
-  const aggregatedStats = await calculateAggregatedStats(tenant.id, filters);
+  const aggregatedStats = await db.getQuickStats(tenant.id);
 
   // Generar SEO
   const seoTitle = buildListTitle(filters, language, pagination.total_items);
@@ -79,10 +65,18 @@ export async function handlePropertyList(options: {
   });
 
   // Obtener contenido relacionado
-  const relatedContent = await getRelatedContent(tenant.id, filters, language);
+  const [faqs, testimonials] = await Promise.all([
+    db.getFAQs({ tenantId: tenant.id, limit: 5 }),
+    db.getTestimonials(tenant.id, 3)
+  ]);
 
-  // Obtener carouseles
-  const carousels = await getCarousels(tenant.id, filters, language, trackingString);
+  // Obtener propiedades destacadas para carousel
+  const featuredProperties = await db.getFeaturedProperties(tenant.id, 12);
+  const carousels = featuredProperties.length > 0 ? [{
+    id: 'featured',
+    title: language === 'en' ? 'Featured Properties' : language === 'fr' ? 'Propriétés en Vedette' : 'Propiedades Destacadas',
+    properties: featuredProperties.map(p => toPropertyCard(p, language, trackingString))
+  }] : [];
 
   return {
     pageType: 'property-list',
@@ -97,9 +91,27 @@ export async function handlePropertyList(options: {
       active: filters,
       available: await getAvailableFilters(tenant.id, language)
     },
-    aggregatedStats,
+    aggregatedStats: {
+      totalCount: aggregatedStats.total_properties,
+      forSale: aggregatedStats.for_sale,
+      forRent: aggregatedStats.for_rent,
+      newThisMonth: aggregatedStats.new_this_month
+    },
     carousels,
-    relatedContent
+    relatedContent: {
+      faqs: faqs.map(f => ({
+        question: f.question,
+        answer: f.answer,
+        category: f.category
+      })),
+      testimonials: testimonials.map(t => ({
+        id: t.id,
+        content: t.content,
+        rating: t.rating,
+        client_name: t.client_name,
+        client_photo: t.client_photo
+      }))
+    }
   };
 }
 
@@ -122,29 +134,27 @@ export async function handleSingleProperty(options: {
     return null;
   }
 
-  // Procesar traducciones
-  const processedProperty = utils.processTranslations(rawProperty, language);
+  // Construir objeto Property completo
+  const property = buildFullProperty(rawProperty, language, trackingString);
 
   // Obtener datos relacionados en paralelo
-  const [amenities, agents, similarProperties, relatedContent] = await Promise.all([
-    db.getPropertyAmenities(rawProperty.id),
-    db.getPropertyAgents(rawProperty.id),
+  const [similarProperties, faqs, testimonials] = await Promise.all([
     getSimilarProperties(tenant.id, rawProperty, language, trackingString),
-    getPropertyRelatedContent(tenant.id, rawProperty, language)
+    db.getFAQs({ tenantId: tenant.id, limit: 5 }),
+    db.getTestimonials(tenant.id, 3)
   ]);
 
-  // Construir objeto Property completo
-  const property = buildFullProperty(processedProperty, amenities, agents, language, trackingString);
-
-  // Encontrar agente principal
-  const mainAgent = agents.find(a => a.is_main) || agents[0];
-  const cocaptors = agents.filter(a => !a.is_main);
-
-  // Obtener propiedades del agente si corresponde
-  let agentProperties: PropertyCard[] = [];
-  if (mainAgent && agents.length === 1) {
-    agentProperties = await getAgentProperties(tenant.id, mainAgent.id, rawProperty.id, language, trackingString);
-  }
+  // Construir agente desde los datos de la propiedad
+  const mainAgent = rawProperty.agente_id ? {
+    id: rawProperty.agente_id,
+    slug: rawProperty.agente_slug || '',
+    full_name: `${rawProperty.agente_nombre || ''} ${rawProperty.agente_apellido || ''}`.trim(),
+    photo_url: rawProperty.agente_avatar || '',
+    phone: rawProperty.agente_telefono || '',
+    whatsapp: rawProperty.agente_telefono || '',
+    email: rawProperty.agente_email || '',
+    is_main: true
+  } : undefined;
 
   // Generar SEO
   const seo = generatePropertySEO(property, language, tenant);
@@ -157,36 +167,26 @@ export async function handleSingleProperty(options: {
     trackingString,
     property,
     agent: {
-      main: mainAgent ? {
-        id: mainAgent.id,
-        slug: mainAgent.slug,
-        full_name: mainAgent.full_name,
-        photo_url: mainAgent.photo_url,
-        phone: mainAgent.phone,
-        whatsapp: mainAgent.whatsapp,
-        email: mainAgent.email,
-        is_main: true
-      } : undefined,
-      cocaptors: cocaptors.map(c => ({
-        id: c.id,
-        slug: c.slug,
-        full_name: c.full_name,
-        photo_url: c.photo_url,
-        phone: c.phone,
-        whatsapp: c.whatsapp,
-        email: c.email,
-        is_main: false
-      })),
-      properties_count: agentProperties.length,
-      should_show_properties: agentProperties.length > 0
+      main: mainAgent,
+      cocaptors: [],
+      properties_count: 0,
+      should_show_properties: false
     },
     relatedContent: {
       similar_properties: similarProperties,
-      articles: relatedContent.articles,
-      videos: relatedContent.videos,
-      faqs: relatedContent.faqs,
-      testimonials: relatedContent.testimonials,
-      agent_properties: agentProperties
+      articles: [],
+      videos: [],
+      faqs: faqs.map(f => ({
+        question: f.question,
+        answer: f.answer
+      })),
+      testimonials: testimonials.map(t => ({
+        id: t.id,
+        content: t.content,
+        rating: t.rating,
+        client_name: t.client_name
+      })),
+      agent_properties: []
     }
   };
 }
@@ -195,13 +195,10 @@ export async function handleSingleProperty(options: {
 // FUNCIONES AUXILIARES
 // ============================================================================
 
-async function parseFiltersFromTags(
-  tenantId: number,
+function parseFiltersFromTags(
   tags: string[],
-  language: string,
   searchParams: URLSearchParams
-): Promise<Record<string, any>> {
-  const sql = db.getSQL();
+): Record<string, any> {
   const filters: Record<string, any> = {};
 
   // Mapeo de slugs de operación
@@ -211,52 +208,50 @@ async function parseFiltersFromTags(
     'venta': 'venta', 'alquiler': 'alquiler'
   };
 
+  // Mapeo de tipos de propiedad
+  const propertyTypes: Record<string, string> = {
+    'casa': 'casa', 'casas': 'casa', 'house': 'casa', 'houses': 'casa',
+    'apartamento': 'apartamento', 'apartamentos': 'apartamento', 'apartment': 'apartamento',
+    'local': 'local', 'locales': 'local', 'commercial': 'local',
+    'terreno': 'terreno', 'terrenos': 'terreno', 'land': 'terreno',
+    'oficina': 'oficina', 'oficinas': 'oficina', 'office': 'oficina',
+    'penthouse': 'penthouse', 'villa': 'villa'
+  };
+
   for (const tag of tags) {
+    const tagLower = tag.toLowerCase();
+
     // Verificar si es operación
-    if (operationSlugs[tag.toLowerCase()]) {
-      filters.operation = operationSlugs[tag.toLowerCase()];
+    if (operationSlugs[tagLower]) {
+      filters.operacion = operationSlugs[tagLower];
       continue;
     }
 
-    // Buscar en categorías
-    const category = await sql`
-      SELECT id, slug FROM categorias_propiedades
-      WHERE (slug = ${tag} OR slug_en = ${tag} OR slug_fr = ${tag})
-        AND tenant_id = ${tenantId}
-      LIMIT 1
-    `;
-
-    if (category[0]) {
-      filters.categoryId = category[0].id;
-      continue;
-    }
-
-    // Buscar en ubicaciones
-    const location = await sql`
-      SELECT id, slug, tipo FROM ubicaciones
-      WHERE (slug = ${tag} OR slug_en = ${tag} OR slug_fr = ${tag})
-        AND tenant_id = ${tenantId}
-        AND activo = true
-      LIMIT 1
-    `;
-
-    if (location[0]) {
-      filters.locationId = location[0].id;
-      filters.locationType = location[0].tipo;
+    // Verificar si es tipo de propiedad
+    if (propertyTypes[tagLower]) {
+      filters.tipo = propertyTypes[tagLower];
       continue;
     }
 
     // Parsear patrones de habitaciones/baños
     const bedroomMatch = tag.match(/^(\d+)-(?:habitaciones?|bedrooms?|chambres?)$/i);
     if (bedroomMatch) {
-      filters.bedrooms = parseInt(bedroomMatch[1], 10);
+      filters.habitaciones = parseInt(bedroomMatch[1], 10);
       continue;
     }
 
     const bathroomMatch = tag.match(/^(\d+)-(?:banos?|bathrooms?|salles?-de-bains?)$/i);
     if (bathroomMatch) {
-      filters.bathrooms = parseInt(bathroomMatch[1], 10);
+      filters.banos = parseInt(bathroomMatch[1], 10);
       continue;
+    }
+
+    // Asumir que otros tags son ubicaciones (ciudad o sector)
+    if (tag && !filters.ciudad) {
+      // Convertir slug a nombre (reemplazar guiones por espacios)
+      filters.ciudad = tag.replace(/-/g, ' ');
+    } else if (tag && !filters.sector) {
+      filters.sector = tag.replace(/-/g, ' ');
     }
   }
 
@@ -268,100 +263,323 @@ async function parseFiltersFromTags(
     filters.maxPrice = parseInt(searchParams.get('max_price')!, 10);
   }
   if (searchParams.get('bedrooms')) {
-    filters.bedrooms = parseInt(searchParams.get('bedrooms')!, 10);
+    filters.habitaciones = parseInt(searchParams.get('bedrooms')!, 10);
   }
   if (searchParams.get('bathrooms')) {
-    filters.bathrooms = parseInt(searchParams.get('bathrooms')!, 10);
+    filters.banos = parseInt(searchParams.get('bathrooms')!, 10);
+  }
+  if (searchParams.get('tipo')) {
+    filters.tipo = searchParams.get('tipo');
+  }
+  if (searchParams.get('operacion')) {
+    filters.operacion = searchParams.get('operacion');
   }
 
   return filters;
 }
 
-async function getAmenitiesForProperties(propertyIds: number[]): Promise<Map<number, any[]>> {
-  const sql = db.getSQL();
-  const map = new Map<number, any[]>();
-
-  if (propertyIds.length === 0) return map;
-
-  const amenities = await sql`
-    SELECT
-      pa.propiedad_id,
-      a.nombre as name,
-      a.nombre_en as name_en,
-      a.nombre_fr as name_fr,
-      a.icono as icon,
-      a.categoria as category
-    FROM propiedad_amenidades pa
-    JOIN amenidades a ON pa.amenidad_id = a.id
-    WHERE pa.propiedad_id = ANY(${propertyIds})
-    ORDER BY a.categoria, a.nombre
-  `;
-
-  amenities.forEach(amenity => {
-    const existing = map.get(amenity.propiedad_id) || [];
-    existing.push(amenity);
-    map.set(amenity.propiedad_id, existing);
-  });
-
-  return map;
-}
-
-async function calculateAggregatedStats(tenantId: number, filters: Record<string, any>) {
-  const sql = db.getSQL();
-
-  // Query simplificada para estadísticas
-  const result = await sql`
-    SELECT
-      COUNT(*) as total_count,
-      AVG(COALESCE(precio_venta, precio_alquiler)) as avg_price,
-      MIN(COALESCE(precio_venta, precio_alquiler)) as min_price,
-      MAX(COALESCE(precio_venta, precio_alquiler)) as max_price,
-      COALESCE(moneda_venta, moneda_alquiler, 'USD') as currency
-    FROM propiedades
-    WHERE tenant_id = ${tenantId}
-      AND estado = 'disponible'
-      ${filters.operation === 'venta' ? sql`AND precio_venta IS NOT NULL` : sql``}
-      ${filters.operation === 'alquiler' ? sql`AND precio_alquiler IS NOT NULL` : sql``}
-      ${filters.categoryId ? sql`AND categoria_id = ${filters.categoryId}` : sql``}
-      ${filters.locationId ? sql`AND (sector_id = ${filters.locationId} OR ciudad_id = ${filters.locationId})` : sql``}
-  `;
-
-  const stats = result[0];
+function toPropertyCard(prop: any, language: string, trackingString: string): PropertyCard {
+  const price = prop.precio_venta || prop.precio_alquiler || prop.precio || 0;
+  const currency = prop.moneda || 'USD';
+  const operationType = prop.operacion || (prop.precio_venta ? 'venta' : 'alquiler');
 
   return {
-    totalCount: parseInt(stats?.total_count || '0', 10),
-    avgPrice: parseFloat(stats?.avg_price || '0'),
-    minPrice: parseFloat(stats?.min_price || '0'),
-    maxPrice: parseFloat(stats?.max_price || '0'),
-    currency: stats?.currency || 'USD'
+    id: prop.id,
+    slug: prop.slug,
+    code: prop.codigo,
+    title: prop.titulo,
+    location: {
+      city: prop.ciudad,
+      sector: prop.sector,
+      address: prop.direccion
+    },
+    price: {
+      amount: price,
+      currency: currency,
+      display: utils.formatPrice(price, currency, operationType, language)
+    },
+    operation_type: operationType,
+    features: {
+      bedrooms: prop.habitaciones || 0,
+      bathrooms: prop.banos || 0,
+      half_bathrooms: prop.medios_banos || 0,
+      parking_spaces: prop.estacionamientos || 0,
+      area_construction: prop.m2_construccion || 0,
+      area_total: prop.m2_terreno || 0
+    },
+    main_image: prop.imagen_principal || '',
+    is_featured: prop.destacada || false,
+    is_new: prop.created_at ? new Date(prop.created_at) > new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) : false,
+    url: utils.buildPropertyUrl(prop, language, trackingString),
+    amenity_badges: parseAmenityBadges(prop.amenidades)
+  };
+}
+
+function parseAmenityBadges(amenidades: any): Array<{ text: string; icon?: string }> {
+  if (!amenidades) return [];
+
+  try {
+    const parsed = typeof amenidades === 'string' ? JSON.parse(amenidades) : amenidades;
+    if (Array.isArray(parsed)) {
+      return parsed.slice(0, 2).map(a => ({
+        text: typeof a === 'string' ? a : a.nombre || a.name || '',
+        icon: typeof a === 'object' ? a.icono || a.icon : undefined
+      }));
+    }
+  } catch {
+    // Ignorar errores de parsing
+  }
+
+  return [];
+}
+
+function buildFullProperty(
+  raw: Record<string, any>,
+  language: string,
+  trackingString: string
+): Property {
+  const images = parseImages(raw.imagenes, raw.imagen_principal);
+  const price = raw.precio_venta || raw.precio_alquiler || raw.precio || 0;
+  const currency = raw.moneda || 'USD';
+  const operationType = raw.operacion || (raw.precio_venta ? 'venta' : 'alquiler');
+
+  // Construir todos los precios disponibles
+  const prices = [];
+  if (raw.precio_venta) {
+    prices.push({
+      type: 'sale' as const,
+      amount: raw.precio_venta,
+      currency: currency,
+      display: utils.formatPrice(raw.precio_venta, currency, 'venta', language)
+    });
+  }
+  if (raw.precio_alquiler) {
+    prices.push({
+      type: 'rental' as const,
+      amount: raw.precio_alquiler,
+      currency: currency,
+      display: utils.formatPrice(raw.precio_alquiler, currency, 'alquiler', language)
+    });
+  }
+
+  return {
+    id: raw.id,
+    slug: raw.slug,
+    code: raw.codigo,
+    created_at: raw.created_at,
+    updated_at: raw.updated_at,
+    tenant_id: raw.tenant_id,
+
+    title: {
+      es: raw.titulo,
+      en: raw.titulo,
+      fr: raw.titulo
+    },
+
+    description: {
+      es: raw.descripcion || raw.short_description || '',
+      en: raw.descripcion || raw.short_description || '',
+      fr: raw.descripcion || raw.short_description || ''
+    },
+
+    location: {
+      country: raw.pais,
+      province: raw.provincia,
+      city: raw.ciudad,
+      sector: raw.sector
+    },
+    address: raw.direccion,
+    coordinates: raw.latitud && raw.longitud ? {
+      lat: parseFloat(raw.latitud),
+      lng: parseFloat(raw.longitud)
+    } : undefined,
+
+    category: {
+      id: 0,
+      slug: raw.tipo,
+      name: raw.tipo
+    },
+
+    operation_type: operationType,
+
+    prices,
+    primary_price: {
+      amount: price,
+      currency: currency,
+      type: operationType,
+      display: utils.formatPrice(price, currency, operationType, language)
+    },
+
+    features: {
+      bedrooms: raw.habitaciones || 0,
+      bathrooms: raw.banos || 0,
+      half_bathrooms: raw.medios_banos || 0,
+      parking_spaces: raw.estacionamientos || 0,
+      area_construction: raw.m2_construccion || 0,
+      area_total: raw.m2_terreno || 0
+    },
+
+    images,
+    main_image: raw.imagen_principal || images[0] || '',
+
+    amenities: parseAmenities(raw.amenidades),
+    amenity_badges: parseAmenityBadges(raw.amenidades),
+
+    agents: [],
+    main_agent: undefined,
+
+    status: raw.estado_propiedad,
+    is_featured: raw.destacada || false,
+    is_project: raw.is_project || false,
+    is_new: raw.created_at ? new Date(raw.created_at) > new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) : false,
+    is_furnished: raw.is_furnished || false,
+    is_exclusive: raw.exclusiva || false,
+
+    url: utils.buildPropertyUrl(raw, language, trackingString)
+  };
+}
+
+function parseImages(imagenes: any, imagenPrincipal?: string): string[] {
+  const result: string[] = [];
+
+  if (imagenPrincipal) {
+    result.push(imagenPrincipal);
+  }
+
+  if (imagenes) {
+    try {
+      const parsed = typeof imagenes === 'string' ? JSON.parse(imagenes) : imagenes;
+      if (Array.isArray(parsed)) {
+        parsed.forEach(img => {
+          const url = typeof img === 'string' ? img : img.url || img.src;
+          if (url && !result.includes(url)) {
+            result.push(url);
+          }
+        });
+      }
+    } catch {
+      // Ignorar errores de parsing
+    }
+  }
+
+  return result;
+}
+
+function parseAmenities(amenidades: any): Array<{ id: number; name: string; icon?: string; category?: string }> {
+  if (!amenidades) return [];
+
+  try {
+    const parsed = typeof amenidades === 'string' ? JSON.parse(amenidades) : amenidades;
+    if (Array.isArray(parsed)) {
+      return parsed.map((a, index) => ({
+        id: index,
+        name: typeof a === 'string' ? a : a.nombre || a.name || '',
+        icon: typeof a === 'object' ? a.icono || a.icon : undefined,
+        category: typeof a === 'object' ? a.categoria || a.category : undefined
+      }));
+    }
+  } catch {
+    // Ignorar errores de parsing
+  }
+
+  return [];
+}
+
+async function getSimilarProperties(
+  tenantId: string,
+  property: Record<string, any>,
+  language: string,
+  trackingString: string
+): Promise<PropertyCard[]> {
+  const sql = db.getSQL();
+
+  // Buscar propiedades similares por tipo, ciudad o sector
+  const similar = await sql`
+    SELECT
+      p.id,
+      p.slug,
+      p.codigo,
+      p.titulo,
+      p.tipo,
+      p.operacion,
+      p.precio,
+      p.precio_venta,
+      p.precio_alquiler,
+      p.moneda,
+      p.ciudad,
+      p.sector,
+      p.direccion,
+      p.habitaciones,
+      p.banos,
+      p.estacionamientos,
+      p.m2_construccion,
+      p.m2_terreno,
+      p.imagen_principal,
+      p.destacada,
+      p.created_at
+    FROM propiedades p
+    WHERE p.tenant_id = ${tenantId}
+      AND p.activo = true
+      AND p.estado_propiedad = 'disponible'
+      AND p.id != ${property.id}
+      AND (
+        p.tipo = ${property.tipo}
+        OR LOWER(p.ciudad) = LOWER(${property.ciudad || ''})
+        OR LOWER(p.sector) = LOWER(${property.sector || ''})
+      )
+    ORDER BY
+      CASE WHEN LOWER(p.sector) = LOWER(${property.sector || ''}) THEN 0 ELSE 1 END,
+      CASE WHEN p.tipo = ${property.tipo} THEN 0 ELSE 1 END,
+      p.destacada DESC
+    LIMIT 6
+  `;
+
+  return similar.map(p => toPropertyCard(p, language, trackingString));
+}
+
+async function getAvailableFilters(tenantId: string, language: string) {
+  const { cities, sectors } = await db.getPopularLocations(tenantId);
+
+  return {
+    categories: [], // El schema no tiene categorías separadas, usa el campo tipo
+    propertyTypes: [
+      { slug: 'casa', name: language === 'en' ? 'House' : 'Casa' },
+      { slug: 'apartamento', name: language === 'en' ? 'Apartment' : 'Apartamento' },
+      { slug: 'local', name: language === 'en' ? 'Commercial' : 'Local' },
+      { slug: 'terreno', name: language === 'en' ? 'Land' : 'Terreno' },
+      { slug: 'oficina', name: language === 'en' ? 'Office' : 'Oficina' },
+      { slug: 'penthouse', name: 'Penthouse' },
+      { slug: 'villa', name: 'Villa' }
+    ],
+    locations: [
+      ...cities.map((c: any) => ({ slug: c.slug, name: c.name, type: 'ciudad', count: parseInt(c.count, 10) })),
+      ...sectors.map((s: any) => ({ slug: s.slug, name: s.name, type: 'sector', count: parseInt(s.count, 10) }))
+    ],
+    operations: [
+      { slug: language === 'es' ? 'comprar' : language === 'en' ? 'buy' : 'acheter', value: 'venta' },
+      { slug: language === 'es' ? 'alquilar' : language === 'en' ? 'rent' : 'louer', value: 'alquiler' }
+    ]
   };
 }
 
 function buildListTitle(filters: Record<string, any>, language: string, total: number): string {
   const parts: string[] = [];
 
-  // Textos por idioma
   const texts = {
     es: {
       properties: 'Propiedades',
       forSale: 'en Venta',
-      forRent: 'en Alquiler',
-      in: 'en',
-      found: `${total} propiedades encontradas`
+      forRent: 'en Alquiler'
     },
     en: {
       properties: 'Properties',
       forSale: 'for Sale',
-      forRent: 'for Rent',
-      in: 'in',
-      found: `${total} properties found`
+      forRent: 'for Rent'
     },
     fr: {
       properties: 'Propriétés',
       forSale: 'à Vendre',
-      forRent: 'à Louer',
-      in: 'à',
-      found: `${total} propriétés trouvées`
+      forRent: 'à Louer'
     }
   };
 
@@ -369,10 +587,14 @@ function buildListTitle(filters: Record<string, any>, language: string, total: n
 
   parts.push(t.properties);
 
-  if (filters.operation === 'venta') {
+  if (filters.operacion === 'venta') {
     parts.push(t.forSale);
-  } else if (filters.operation === 'alquiler') {
+  } else if (filters.operacion === 'alquiler') {
     parts.push(t.forRent);
+  }
+
+  if (filters.ciudad) {
+    parts.push(`en ${filters.ciudad}`);
   }
 
   return parts.join(' ');
@@ -403,331 +625,13 @@ function buildCanonicalUrl(tags: string[], language: string): string {
   return utils.buildUrl(path, language);
 }
 
-async function getAvailableFilters(tenantId: number, language: string) {
-  const sql = db.getSQL();
-
-  const [categories, locations] = await Promise.all([
-    sql`
-      SELECT id, slug, nombre as name, nombre_en, nombre_fr
-      FROM categorias_propiedades
-      WHERE tenant_id = ${tenantId} AND activo = true
-      ORDER BY nombre
-    `,
-    sql`
-      SELECT id, slug, nombre as name, tipo as type
-      FROM ubicaciones
-      WHERE tenant_id = ${tenantId} AND activo = true
-      ORDER BY tipo, nombre
-    `
-  ]);
-
-  return {
-    categories: categories.map(c => ({
-      id: c.id,
-      slug: c.slug,
-      name: utils.getTranslatedField(c, 'name', language)
-    })),
-    locations: locations.map(l => ({
-      id: l.id,
-      slug: l.slug,
-      name: l.name,
-      type: l.type
-    })),
-    operations: [
-      { slug: language === 'es' ? 'comprar' : language === 'en' ? 'buy' : 'acheter', value: 'venta' },
-      { slug: language === 'es' ? 'alquilar' : language === 'en' ? 'rent' : 'louer', value: 'alquiler' }
-    ]
-  };
-}
-
-async function getRelatedContent(tenantId: number, filters: Record<string, any>, language: string) {
-  const sql = db.getSQL();
-
-  const [articles, videos, faqs, testimonials] = await Promise.all([
-    sql`
-      SELECT id, slug, titulo as title, titulo_en, titulo_fr, extracto as excerpt, imagen_destacada as image
-      FROM articulos
-      WHERE tenant_id = ${tenantId} AND estado = 'publicado'
-      ORDER BY fecha_publicacion DESC
-      LIMIT 3
-    `,
-    sql`
-      SELECT id, slug, titulo as title, titulo_en, titulo_fr, thumbnail, video_url
-      FROM videos
-      WHERE tenant_id = ${tenantId} AND estado = 'publicado'
-      ORDER BY fecha_publicacion DESC
-      LIMIT 3
-    `,
-    db.getFAQs({ tenantId, context: 'general', limit: 5 }),
-    sql`
-      SELECT id, contenido as content, calificacion as rating, nombre_cliente as client_name, foto_cliente as client_photo
-      FROM testimonios
-      WHERE tenant_id = ${tenantId} AND estado = 'aprobado' AND destacado = true
-      ORDER BY created_at DESC
-      LIMIT 3
-    `
-  ]);
-
-  return {
-    articles: articles.map(a => ({
-      ...a,
-      title: utils.getTranslatedField(a, 'title', language)
-    })),
-    videos: videos.map(v => ({
-      ...v,
-      title: utils.getTranslatedField(v, 'title', language)
-    })),
-    faqs: faqs.map(f => ({
-      ...f,
-      question: utils.getTranslatedField(f, 'question', language),
-      answer: utils.getTranslatedField(f, 'answer', language)
-    })),
-    testimonials
-  };
-}
-
-async function getCarousels(
-  tenantId: number,
-  filters: Record<string, any>,
-  language: string,
-  trackingString: string
-) {
-  const sql = db.getSQL();
-
-  // Obtener propiedades destacadas para carouseles
-  const featured = await sql`
-    SELECT p.*, cp.nombre as categoria_nombre, cp.slug as categoria_slug,
-           s.nombre as sector_nombre, s.slug as sector_slug,
-           c.nombre as ciudad_nombre, c.slug as ciudad_slug
-    FROM propiedades p
-    LEFT JOIN categorias_propiedades cp ON p.categoria_id = cp.id
-    LEFT JOIN ubicaciones s ON p.sector_id = s.id
-    LEFT JOIN ubicaciones c ON p.ciudad_id = c.id
-    WHERE p.tenant_id = ${tenantId}
-      AND p.estado = 'disponible'
-      AND p.destacada = true
-    ORDER BY p.created_at DESC
-    LIMIT 12
-  `;
-
-  if (featured.length === 0) return [];
-
-  const titles = {
-    es: 'Propiedades Destacadas',
-    en: 'Featured Properties',
-    fr: 'Propriétés en Vedette'
-  };
-
-  return [{
-    id: 'featured',
-    title: titles[language as keyof typeof titles] || titles.es,
-    properties: featured.map(p => utils.toPropertyCard(p, language, trackingString))
-  }];
-}
-
-function buildFullProperty(
-  raw: Record<string, any>,
-  amenities: any[],
-  agents: any[],
-  language: string,
-  trackingString: string
-): Property {
-  const { main_image, images } = utils.processImages(raw.imagen_principal, raw.galeria_imagenes);
-  const locationHierarchy = utils.buildLocationHierarchy(raw);
-  const priceDisplay = utils.buildPriceDisplay(raw, language);
-
-  // Construir todos los precios disponibles
-  const prices = [];
-  if (raw.precio_venta) {
-    prices.push({
-      type: 'sale' as const,
-      amount: raw.precio_venta,
-      currency: raw.moneda_venta || 'USD',
-      display: utils.formatPrice(raw.precio_venta, raw.moneda_venta || 'USD', 'sale', language)
-    });
-  }
-  if (raw.precio_alquiler) {
-    prices.push({
-      type: 'rental' as const,
-      amount: raw.precio_alquiler,
-      currency: raw.moneda_alquiler || 'USD',
-      display: utils.formatPrice(raw.precio_alquiler, raw.moneda_alquiler || 'USD', 'rental', language)
-    });
-  }
-
-  return {
-    id: raw.id,
-    slug: raw.slug,
-    code: raw.codigo,
-    created_at: raw.created_at,
-    updated_at: raw.updated_at,
-    tenant_id: raw.tenant_id,
-
-    title: {
-      es: raw.titulo,
-      en: raw.titulo_en || raw.traducciones?.en?.titulo,
-      fr: raw.titulo_fr || raw.traducciones?.fr?.titulo
-    },
-
-    description: {
-      es: raw.descripcion || '',
-      en: raw.descripcion_en || raw.traducciones?.en?.descripcion,
-      fr: raw.descripcion_fr || raw.traducciones?.fr?.descripcion
-    },
-
-    location: locationHierarchy,
-    address: raw.direccion,
-    coordinates: utils.parseCoordinates(raw.coordenadas_exactas || raw.ciudad_coordenadas),
-
-    category: {
-      id: raw.categoria_id,
-      slug: raw.categoria_slug,
-      name: raw.categoria_nombre,
-      name_en: raw.categoria_nombre_en,
-      name_fr: raw.categoria_nombre_fr
-    },
-
-    operation_type: raw.precio_venta && raw.precio_alquiler ? 'ambos' :
-                    raw.precio_venta ? 'venta' : 'alquiler',
-
-    prices,
-    primary_price: priceDisplay,
-
-    features: {
-      bedrooms: raw.habitaciones || 0,
-      bathrooms: raw.banos || 0,
-      half_bathrooms: raw.medios_banos || 0,
-      parking_spaces: raw.parqueos || 0,
-      area_construction: raw.area_construida || 0,
-      area_total: raw.area_total || 0,
-      floor: raw.piso,
-      year_built: raw.ano_construccion
-    },
-
-    images,
-    main_image,
-
-    amenities: amenities.map(a => ({
-      id: a.id,
-      name: a.name,
-      name_en: a.name_en,
-      name_fr: a.name_fr,
-      icon: a.icon,
-      category: a.category
-    })),
-
-    amenity_badges: amenities.slice(0, 2).map(a => ({
-      text: utils.getTranslatedField(a, 'name', language),
-      icon: a.icon,
-      category: a.category
-    })),
-
-    agents: agents.map(a => ({
-      id: a.id,
-      slug: a.slug,
-      full_name: a.full_name,
-      photo_url: a.photo_url,
-      phone: a.phone,
-      whatsapp: a.whatsapp,
-      email: a.email,
-      is_main: a.is_main
-    })),
-
-    main_agent: agents.find(a => a.is_main) || agents[0],
-
-    project: raw.proyecto_id ? {
-      id: raw.proyecto_id,
-      slug: raw.proyecto_slug,
-      name: raw.proyecto_nombre,
-      image: raw.proyecto_imagen
-    } : undefined,
-
-    status: raw.estado,
-    is_featured: raw.destacada || false,
-    is_project: raw.es_proyecto || false,
-    is_new: new Date(raw.created_at) > new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
-
-    url: utils.buildPropertyUrl(raw, language, trackingString)
-  };
-}
-
-async function getSimilarProperties(
-  tenantId: number,
-  property: Record<string, any>,
-  language: string,
-  trackingString: string
-): Promise<PropertyCard[]> {
-  const sql = db.getSQL();
-
-  const similar = await sql`
-    SELECT p.*, cp.nombre as categoria_nombre, cp.slug as categoria_slug,
-           s.nombre as sector_nombre, s.slug as sector_slug,
-           c.nombre as ciudad_nombre, c.slug as ciudad_slug
-    FROM propiedades p
-    LEFT JOIN categorias_propiedades cp ON p.categoria_id = cp.id
-    LEFT JOIN ubicaciones s ON p.sector_id = s.id
-    LEFT JOIN ubicaciones c ON p.ciudad_id = c.id
-    WHERE p.tenant_id = ${tenantId}
-      AND p.estado = 'disponible'
-      AND p.id != ${property.id}
-      AND (
-        p.categoria_id = ${property.categoria_id}
-        OR p.ciudad_id = ${property.ciudad_id}
-        OR p.sector_id = ${property.sector_id}
-      )
-    ORDER BY
-      CASE WHEN p.sector_id = ${property.sector_id} THEN 0 ELSE 1 END,
-      CASE WHEN p.categoria_id = ${property.categoria_id} THEN 0 ELSE 1 END,
-      p.destacada DESC
-    LIMIT 6
-  `;
-
-  return similar.map(p => utils.toPropertyCard(p, language, trackingString));
-}
-
-async function getPropertyRelatedContent(tenantId: number, property: Record<string, any>, language: string) {
-  return getRelatedContent(tenantId, {
-    categoryId: property.categoria_id,
-    locationId: property.ciudad_id
-  }, language);
-}
-
-async function getAgentProperties(
-  tenantId: number,
-  agentId: number,
-  excludePropertyId: number,
-  language: string,
-  trackingString: string
-): Promise<PropertyCard[]> {
-  const sql = db.getSQL();
-
-  const properties = await sql`
-    SELECT p.*, cp.nombre as categoria_nombre, cp.slug as categoria_slug,
-           s.nombre as sector_nombre, s.slug as sector_slug,
-           c.nombre as ciudad_nombre, c.slug as ciudad_slug
-    FROM propiedades p
-    JOIN propiedad_asesores pa ON p.id = pa.propiedad_id
-    LEFT JOIN categorias_propiedades cp ON p.categoria_id = cp.id
-    LEFT JOIN ubicaciones s ON p.sector_id = s.id
-    LEFT JOIN ubicaciones c ON p.ciudad_id = c.id
-    WHERE pa.asesor_id = ${agentId}
-      AND p.tenant_id = ${tenantId}
-      AND p.estado = 'disponible'
-      AND p.id != ${excludePropertyId}
-    ORDER BY p.destacada DESC, p.created_at DESC
-    LIMIT 8
-  `;
-
-  return properties.map(p => utils.toPropertyCard(p, language, trackingString));
-}
-
 function generatePropertySEO(property: Property, language: string, tenant: TenantConfig): SEOData {
-  const title = utils.getLocalizedText(property.title, language);
-  const location = utils.buildLocationDisplay(property.location);
+  const title = property.title.es || property.title.en || '';
+  const location = [property.location.sector, property.location.city].filter(Boolean).join(', ');
 
   const seoTitle = `${title} | ${property.primary_price.display} | ${tenant.name}`;
 
-  const description = utils.getLocalizedText(property.description, language);
+  const description = property.description.es || property.description.en || '';
   const seoDescription = description
     ? description.substring(0, 150)
     : `${title} en ${location}. ${property.features.bedrooms} hab, ${property.features.bathrooms} baños. ${property.primary_price.display}`;
