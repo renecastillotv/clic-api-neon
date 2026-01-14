@@ -1,26 +1,20 @@
 // api/handlers/homepage.ts
 // Handler para la página de inicio
-// Adaptado al schema real de Neon
+// Formato compatible con Supabase Edge Functions
 
 import db from '../lib/db';
 import utils from '../lib/utils';
-import type {
-  HomepageResponse,
-  TenantConfig,
-  PropertyCard,
-  HotItems,
-  SEOData
-} from '../types';
+import type { TenantConfig } from '../types';
 
 // ============================================================================
-// HANDLER: Homepage
+// HANDLER: Homepage (Formato Supabase)
 // ============================================================================
 
 export async function handleHomepage(options: {
   tenant: TenantConfig;
   language: string;
   trackingString: string;
-}): Promise<HomepageResponse> {
+}): Promise<any> {
   const { tenant, language, trackingString } = options;
 
   // Obtener datos en paralelo usando las funciones de db.ts
@@ -40,7 +34,270 @@ export async function handleHomepage(options: {
     db.getFAQs({ tenantId: tenant.id, limit: 6 })
   ]);
 
-  // Construir secciones
+  // Convertir propiedades al formato Supabase
+  const properties = featuredProperties.map(p => toSupabasePropertyFormat(p, language, trackingString));
+
+  // Construir searchTags en formato Supabase
+  const searchTags = buildSearchTags(popularLocations, language);
+
+  // Construir sections
+  const sections = buildHomepageSections(tenant, featuredProperties, testimonials, advisors, faqs, language, trackingString);
+
+  // Generar SEO
+  const seo = generateHomepageSEO(tenant, language);
+
+  // Generar breadcrumbs
+  const breadcrumbs = [
+    { name: 'Inicio', url: '/', is_active: true, is_current_page: true, position: 0 }
+  ];
+
+  // Respuesta en formato compatible con Supabase
+  return {
+    type: 'homepage',
+    available: true,
+    searchResults: {
+      properties,
+      tags: searchTags.tags,
+      searchTerms: [],
+      pagination: {
+        currentPage: 1,
+        totalCount: properties.length,
+        itemsPerPage: 12,
+        totalPages: 1,
+        hasMore: false,
+        hasNextPage: false,
+        hasPreviousPage: false
+      }
+    },
+    relatedContent: {
+      articles: [],
+      videos: [],
+      testimonials: testimonials.map(t => ({
+        id: t.id,
+        content: t.content,
+        rating: t.rating || 5,
+        client_name: t.client_name,
+        client_photo: t.client_photo,
+        client_location: t.client_location,
+        is_featured: t.is_featured
+      })),
+      faqs: faqs.map(f => ({
+        id: f.id,
+        question: f.question,
+        answer: f.answer,
+        category: f.category,
+        order: f.order
+      })),
+      seo_content: [],
+      content_source: 'neon_db',
+      hierarchy_info: {
+        specific_count: 0,
+        tag_related_count: faqs.length + testimonials.length,
+        default_count: 0
+      },
+      carousels: [{
+        id: 'featured',
+        title: language === 'en' ? 'Featured Properties' : language === 'fr' ? 'Propriétés en Vedette' : 'Propiedades Destacadas',
+        properties: properties.slice(0, 6)
+      }]
+    },
+    referralAgent: null,
+    breadcrumbs,
+    seo,
+    countryInfo: {
+      code: tenant.regional?.country_code || 'DO',
+      name: 'República Dominicana',
+      currency: tenant.regional?.currency_default || 'USD'
+    },
+    // Campos adicionales específicos del homepage
+    sections,
+    searchTags,
+    hotItems: {
+      cities: popularLocations.cities.map((c: any) => ({
+        slug: c.slug,
+        title: c.name,
+        url: utils.buildUrl(`/comprar/${c.slug}`, language, trackingString),
+        count: parseInt(c.count, 10)
+      })),
+      sectors: popularLocations.sectors.map((s: any) => ({
+        slug: s.slug,
+        title: s.name,
+        url: utils.buildUrl(`/comprar/${s.slug}`, language, trackingString),
+        count: parseInt(s.count, 10)
+      })),
+      properties: properties.slice(0, 6),
+      agents: advisors.slice(0, 4).map((a: any) => ({
+        slug: a.slug,
+        name: `${a.nombre} ${a.apellido}`.trim(),
+        photo_url: a.foto_url || a.avatar_url,
+        url: utils.buildUrl(`/asesores/${a.slug}`, language, trackingString)
+      })),
+      projects: []
+    },
+    quickStats: {
+      total_properties: quickStats.total_properties,
+      for_sale: quickStats.for_sale,
+      for_rent: quickStats.for_rent,
+      new_this_month: quickStats.new_this_month
+    },
+    advisors: advisors.map((a: any) => ({
+      id: a.perfil_id || a.usuario_id,
+      slug: a.slug,
+      name: `${a.nombre} ${a.apellido}`.trim(),
+      photo_url: a.foto_url || a.avatar_url,
+      titulo_profesional: a.titulo_profesional,
+      biografia: a.biografia,
+      properties_count: parseInt(a.propiedades_count || '0', 10),
+      experiencia_anos: a.experiencia_anos,
+      especialidades: a.especialidades,
+      destacado: a.destacado,
+      url: utils.buildUrl(`/asesores/${a.slug}`, language, trackingString)
+    })),
+    meta: {
+      timestamp: new Date().toISOString(),
+      source: 'neon_edge_function',
+      tenant_id: tenant.id,
+      language
+    }
+  };
+}
+
+// ============================================================================
+// FUNCIONES DE CONVERSIÓN
+// ============================================================================
+
+function toSupabasePropertyFormat(prop: any, language: string, trackingString: string): any {
+  const salePrice = prop.precio_venta ? parseFloat(prop.precio_venta) : null;
+  const rentalPrice = prop.precio_alquiler ? parseFloat(prop.precio_alquiler) : null;
+  const currency = prop.moneda_venta || prop.moneda_alquiler || prop.moneda || 'USD';
+  const operationType = salePrice ? 'venta' : 'alquiler';
+  const displayPrice = salePrice || rentalPrice || 0;
+
+  const pricingUnified = {
+    display_price: {
+      formatted: utils.formatPrice(displayPrice, currency, operationType, language),
+      amount: displayPrice,
+      currency
+    },
+    operation_type: operationType,
+    ...(salePrice && {
+      sale: {
+        price: salePrice,
+        currency: prop.moneda_venta || currency,
+        formatted: utils.formatPrice(salePrice, prop.moneda_venta || currency, 'venta', language)
+      }
+    }),
+    ...(rentalPrice && {
+      rental: {
+        price: rentalPrice,
+        currency: prop.moneda_alquiler || currency,
+        formatted: utils.formatPrice(rentalPrice, prop.moneda_alquiler || currency, 'alquiler', language)
+      }
+    })
+  };
+
+  const mainImage = prop.imagen_principal || '';
+  const slugUrl = buildPropertySlugUrl(prop, language);
+
+  return {
+    id: prop.id,
+    code: prop.codigo || prop.id,
+    name: prop.titulo || 'Propiedad sin nombre',
+    description: prop.descripcion || prop.short_description || '',
+    agent_id: prop.agente_id || prop.perfil_asesor_id,
+    slug_url: slugUrl,
+    sale_price: salePrice,
+    sale_currency: prop.moneda_venta || currency,
+    rental_price: rentalPrice,
+    rental_currency: prop.moneda_alquiler || currency,
+    temp_rental_price: null,
+    temp_rental_currency: currency,
+    furnished_rental_price: null,
+    furnished_rental_currency: currency,
+    bedrooms: prop.habitaciones || 0,
+    bathrooms: prop.banos || 0,
+    parking_spots: prop.estacionamientos || prop.parking || 0,
+    built_area: prop.m2_construccion || prop.area_construida || null,
+    land_area: prop.m2_terreno || prop.area_total || null,
+    main_image_url: mainImage,
+    gallery_images_url: '',
+    property_status: prop.estado_propiedad || 'disponible',
+    is_project: prop.is_project || false,
+    delivery_date: null,
+    project_detail_id: null,
+    exact_coordinates: null,
+    show_exact_location: false,
+    property_categories: {
+      name: formatPropertyType(prop.tipo, language),
+      description: ''
+    },
+    cities: {
+      name: prop.ciudad || '',
+      coordinates: null,
+      provinces: { name: prop.provincia || '', coordinates: null }
+    },
+    sectors: {
+      name: prop.sector || '',
+      coordinates: null
+    },
+    property_images: mainImage ? [{ url: mainImage, title: 'Imagen Principal', is_main: true, sort_order: 0 }] : [],
+    pricing_unified: pricingUnified,
+    main_image_optimized: mainImage,
+    images_unified: mainImage ? [{ url: mainImage, optimized_url: mainImage, is_main: true, sort_order: 0, position: 0 }] : [],
+    images_count: mainImage ? 1 : 0,
+    location: {
+      address: prop.direccion || '',
+      sector: prop.sector,
+      city: prop.ciudad,
+      province: prop.provincia
+    }
+  };
+}
+
+function buildPropertySlugUrl(prop: any, language: string): string {
+  const operation = prop.precio_venta ? 'comprar' : 'alquilar';
+  const category = utils.slugify(prop.tipo || 'propiedad');
+  const city = utils.slugify(prop.ciudad || '');
+  const sector = utils.slugify(prop.sector || '');
+  const slug = prop.slug;
+
+  let url = `/${operation}`;
+  if (category) url += `/${category}`;
+  if (city) url += `/${city}`;
+  if (sector) url += `/${sector}`;
+  url += `/${slug}`;
+
+  return utils.buildUrl(url, language);
+}
+
+function formatPropertyType(tipo: string, language: string): string {
+  const types: Record<string, Record<string, string>> = {
+    casa: { es: 'Casa', en: 'House', fr: 'Maison' },
+    apartamento: { es: 'Apartamento', en: 'Apartment', fr: 'Appartement' },
+    penthouse: { es: 'Penthouse', en: 'Penthouse', fr: 'Penthouse' },
+    villa: { es: 'Villa', en: 'Villa', fr: 'Villa' },
+    local: { es: 'Local Comercial', en: 'Commercial Space', fr: 'Local Commercial' },
+    oficina: { es: 'Oficina', en: 'Office', fr: 'Bureau' },
+    terreno: { es: 'Terreno', en: 'Land', fr: 'Terrain' }
+  };
+
+  const tipoLower = (tipo || '').toLowerCase();
+  return types[tipoLower]?.[language] || types[tipoLower]?.es || tipo || 'Propiedad';
+}
+
+// ============================================================================
+// FUNCIONES AUXILIARES
+// ============================================================================
+
+function buildHomepageSections(
+  tenant: TenantConfig,
+  featuredProperties: any[],
+  testimonials: any[],
+  advisors: any[],
+  faqs: any[],
+  language: string,
+  trackingString: string
+): any[] {
   const sections = [];
 
   // Hero section
@@ -55,7 +312,7 @@ export async function handleHomepage(options: {
       type: 'property-carousel',
       data: {
         title: getTranslatedText('Propiedades Destacadas', 'Featured Properties', 'Propriétés en Vedette', language),
-        properties: featuredProperties.map(p => toPropertyCard(p, language, trackingString))
+        properties: featuredProperties.map(p => toSupabasePropertyFormat(p, language, trackingString))
       }
     });
   }
@@ -72,8 +329,7 @@ export async function handleHomepage(options: {
           rating: t.rating || 5,
           client_name: t.client_name,
           client_photo: t.client_photo,
-          client_location: t.client_location,
-          property_type: t.property_type
+          client_location: t.client_location
         }))
       }
     });
@@ -88,8 +344,8 @@ export async function handleHomepage(options: {
         advisors: advisors.map((a: any) => ({
           slug: a.slug,
           name: `${a.nombre} ${a.apellido}`.trim(),
-          avatar: a.avatar,
-          bio: a.bio,
+          avatar: a.foto_url || a.avatar_url,
+          bio: a.biografia,
           properties_count: parseInt(a.propiedades_count || '0', 10),
           url: utils.buildUrl(`/asesores/${a.slug}`, language, trackingString)
         }))
@@ -112,116 +368,31 @@ export async function handleHomepage(options: {
     });
   }
 
-  // Construir hotItems
-  const hotItems: HotItems = {
-    cities: popularLocations.cities.map((c: any) => ({
-      slug: c.slug,
-      title: c.name,
-      url: utils.buildUrl(`/comprar/${c.slug}`, language, trackingString),
-      count: parseInt(c.count, 10)
-    })),
-    sectors: popularLocations.sectors.map((s: any) => ({
-      slug: s.slug,
-      title: s.name,
-      url: utils.buildUrl(`/comprar/${s.slug}`, language, trackingString),
-      count: parseInt(s.count, 10)
-    })),
-    properties: featuredProperties.slice(0, 6).map(p => toPropertyCard(p, language, trackingString)),
-    agents: advisors.slice(0, 4).map((a: any) => ({
-      slug: a.slug,
-      name: `${a.nombre} ${a.apellido}`.trim(),
-      photo_url: a.avatar,
-      url: utils.buildUrl(`/asesores/${a.slug}`, language, trackingString)
-    })),
-    projects: [] // No hay tabla de proyectos en el schema actual
-  };
-
-  // Construir searchTags
-  const searchTags = buildSearchTags(popularLocations, language);
-
-  // Generar SEO
-  const seo = generateHomepageSEO(tenant, language);
-
-  return {
-    pageType: 'homepage',
-    language,
-    tenant,
-    seo,
-    trackingString,
-    sections,
-    searchTags,
-    hotItems,
-    quickStats
-  };
+  return sections;
 }
 
-// ============================================================================
-// FUNCIONES AUXILIARES
-// ============================================================================
-
-function getHeroSection(tenant: TenantConfig, language: string) {
-  const config = tenant.config || {};
-  const heroConfig = config.homepage?.hero || {};
-
+function getHeroSection(tenant: TenantConfig, language: string): any {
   const titles = {
-    es: heroConfig.title_es || 'Encuentra tu hogar ideal',
-    en: heroConfig.title_en || 'Find your ideal home',
-    fr: heroConfig.title_fr || 'Trouvez votre maison idéale'
+    es: 'Encuentra tu hogar ideal',
+    en: 'Find your ideal home',
+    fr: 'Trouvez votre maison idéale'
   };
 
   const subtitles = {
-    es: heroConfig.subtitle_es || 'Miles de propiedades te esperan',
-    en: heroConfig.subtitle_en || 'Thousands of properties await you',
-    fr: heroConfig.subtitle_fr || 'Des milliers de propriétés vous attendent'
+    es: 'Miles de propiedades te esperan',
+    en: 'Thousands of properties await you',
+    fr: 'Des milliers de propriétés vous attendent'
   };
 
   return {
     title: titles[language as keyof typeof titles] || titles.es,
     subtitle: subtitles[language as keyof typeof subtitles] || subtitles.es,
-    backgroundImage: heroConfig.background_image || 'https://images.unsplash.com/photo-1600047509807-ba8f99d2cdde?w=1920&h=1080&fit=crop&auto=format&q=80',
-    showSearch: heroConfig.show_search !== false
+    backgroundImage: 'https://images.unsplash.com/photo-1600047509807-ba8f99d2cdde?w=1920&h=1080&fit=crop&auto=format&q=80',
+    showSearch: true
   };
 }
 
-function toPropertyCard(prop: any, language: string, trackingString: string): PropertyCard {
-  const price = prop.precio_venta || prop.precio_alquiler || prop.precio || 0;
-  const currency = prop.moneda || 'USD';
-  const operationType = prop.operacion || (prop.precio_venta ? 'venta' : 'alquiler');
-
-  return {
-    id: prop.id,
-    slug: prop.slug,
-    code: prop.codigo,
-    title: prop.titulo,
-    location: {
-      city: prop.ciudad,
-      sector: prop.sector,
-      address: prop.direccion
-    },
-    price: {
-      amount: price,
-      currency: currency,
-      display: utils.formatPrice(price, currency, operationType, language)
-    },
-    operation_type: operationType,
-    features: {
-      bedrooms: prop.habitaciones || 0,
-      bathrooms: prop.banos || 0,
-      half_bathrooms: prop.medios_banos || 0,
-      parking_spaces: prop.estacionamientos || 0,
-      area_construction: prop.m2_construccion || 0,
-      area_total: prop.m2_terreno || 0
-    },
-    main_image: prop.imagen_principal || '',
-    is_featured: prop.destacada || false,
-    is_new: prop.created_at ? new Date(prop.created_at) > new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) : false,
-    url: utils.buildPropertyUrl(prop, language, trackingString),
-    amenity_badges: []
-  };
-}
-
-function buildSearchTags(popularLocations: { cities: any[]; sectors: any[] }, language: string) {
-  // Tipos de propiedad estáticos
+function buildSearchTags(popularLocations: { cities: any[]; sectors: any[] }, language: string): any {
   const propertyTypes = [
     { id: 1, slug: 'casa', name: language === 'en' ? 'House' : 'Casa' },
     { id: 2, slug: 'apartamento', name: language === 'en' ? 'Apartment' : 'Apartamento' },
@@ -246,7 +417,7 @@ function buildSearchTags(popularLocations: { cities: any[]; sectors: any[] }, la
         name: s.name
       }))
     },
-    locationHierarchy: [], // Simplificado - no hay jerarquía en el schema actual
+    locationHierarchy: [],
     currencies: {
       available: ['USD', 'DOP'],
       default: 'USD'
@@ -262,7 +433,7 @@ function getTranslatedText(es: string, en: string, fr: string, language: string)
   }
 }
 
-function generateHomepageSEO(tenant: TenantConfig, language: string): SEOData {
+function generateHomepageSEO(tenant: TenantConfig, language: string): any {
   const titles = {
     es: `${tenant.name} - Bienes Raíces y Propiedades`,
     en: `${tenant.name} - Real Estate and Properties`,
@@ -275,14 +446,20 @@ function generateHomepageSEO(tenant: TenantConfig, language: string): SEOData {
     fr: `Trouvez votre maison idéale avec ${tenant.name}. Large sélection de propriétés à vendre et à louer. Des conseillers experts à votre service.`
   };
 
-  return utils.generateSEO({
-    title: titles[language as keyof typeof titles] || titles.es,
-    description: descriptions[language as keyof typeof descriptions] || descriptions.es,
+  const title = titles[language as keyof typeof titles] || titles.es;
+  const description = descriptions[language as keyof typeof descriptions] || descriptions.es;
+
+  return {
+    title,
+    description,
+    h1: title,
     keywords: 'bienes raíces, propiedades, casas, apartamentos, venta, alquiler, inmobiliaria',
-    canonicalUrl: utils.buildUrl('/', language),
-    language,
-    siteName: tenant.name
-  });
+    og: {
+      title,
+      description,
+      type: 'website'
+    }
+  };
 }
 
 export default {

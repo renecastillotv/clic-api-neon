@@ -204,7 +204,7 @@ export default async function handler(request: Request): Promise<Response> {
       case 'articles':
         // Artículos no implementados en el schema actual
         response = {
-          pageType: 'articles-main',
+          type: 'articles-main',
           language,
           tenant,
           seo: utils.generateSEO({
@@ -220,7 +220,7 @@ export default async function handler(request: Request): Promise<Response> {
       case 'videos':
         // Videos no implementados en el schema actual
         response = {
-          pageType: 'videos-main',
+          type: 'videos-main',
           language,
           tenant,
           seo: utils.generateSEO({
@@ -246,7 +246,7 @@ export default async function handler(request: Request): Promise<Response> {
       case 'favorites':
         // TODO: Implementar handler de favoritos
         response = {
-          pageType: 'favorites-main',
+          type: 'favorites-main',
           language,
           tenant,
           seo: utils.generateSEO({
@@ -261,7 +261,7 @@ export default async function handler(request: Request): Promise<Response> {
       case 'contact':
         // TODO: Implementar handler de contacto
         response = {
-          pageType: 'contact',
+          type: 'contact',
           language,
           tenant,
           seo: utils.generateSEO({
@@ -276,7 +276,7 @@ export default async function handler(request: Request): Promise<Response> {
       case 'sell':
         // TODO: Implementar handler de vender
         response = {
-          pageType: 'sell',
+          type: 'sell',
           language,
           tenant,
           seo: utils.generateSEO({
@@ -291,7 +291,7 @@ export default async function handler(request: Request): Promise<Response> {
       case 'vacation-rentals':
         // TODO: Implementar handler de rentas vacacionales
         response = {
-          pageType: 'vacation-rentals-main',
+          type: 'vacation-rentals-main',
           language,
           tenant,
           seo: utils.generateSEO({
@@ -306,7 +306,7 @@ export default async function handler(request: Request): Promise<Response> {
       case 'curated-listings':
         // TODO: Implementar handler de listados curados
         response = {
-          pageType: 'curated-listings-main',
+          type: 'curated-listings-main',
           language,
           tenant,
           seo: utils.generateSEO({
@@ -321,7 +321,7 @@ export default async function handler(request: Request): Promise<Response> {
       case 'locations':
         // TODO: Implementar handler de ubicaciones
         response = {
-          pageType: 'locations-main',
+          type: 'locations-main',
           language,
           tenant,
           seo: utils.generateSEO({
@@ -336,7 +336,7 @@ export default async function handler(request: Request): Promise<Response> {
       case 'property-types':
         // TODO: Implementar handler de tipos de propiedad
         response = {
-          pageType: 'property-types-main',
+          type: 'property-types-main',
           language,
           tenant,
           seo: utils.generateSEO({
@@ -352,7 +352,7 @@ export default async function handler(request: Request): Promise<Response> {
       case 'legal-privacy':
         // TODO: Implementar handler de páginas legales
         response = {
-          pageType: routeType,
+          type: routeType,
           language,
           tenant,
           seo: utils.generateSEO({
@@ -370,7 +370,7 @@ export default async function handler(request: Request): Promise<Response> {
     }
 
     const duration = Date.now() - startTime;
-    console.log(`[API] Response in ${duration}ms | pageType: ${response.pageType}`);
+    console.log(`[API] Response in ${duration}ms | type: ${response.type}`);
 
     return jsonResponse(response);
 
@@ -533,7 +533,7 @@ function looksLikePropertySlug(slug: string): boolean {
   return false;
 }
 
-function build404Response(tenant: TenantConfig, language: string, trackingString: string): Error404Response {
+function build404Response(tenant: TenantConfig, language: string, trackingString: string): any {
   const titles = {
     es: 'Página no encontrada',
     en: 'Page not found',
@@ -547,19 +547,28 @@ function build404Response(tenant: TenantConfig, language: string, trackingString
   };
 
   return {
-    pageType: '404',
+    type: '404',
+    available: false,
     language,
     tenant,
-    seo: utils.generateSEO({
+    seo: {
       title: titles[language as keyof typeof titles] || titles.es,
       description: descriptions[language as keyof typeof descriptions] || descriptions.es,
-      language,
-    }),
+    },
+    breadcrumbs: [
+      { name: 'Inicio', url: '/', is_active: false },
+      { name: '404', url: '#', is_active: true, is_current_page: true }
+    ],
     trackingString,
     suggestedLinks: [
       { title: language === 'es' ? 'Inicio' : language === 'en' ? 'Home' : 'Accueil', url: utils.buildUrl('/', language) },
       { title: language === 'es' ? 'Propiedades' : language === 'en' ? 'Properties' : 'Propriétés', url: utils.buildUrl('/comprar', language) },
     ],
+    meta: {
+      timestamp: new Date().toISOString(),
+      source: 'neon_edge_function',
+      error: 'not_found'
+    }
   };
 }
 

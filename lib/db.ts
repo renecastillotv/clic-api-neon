@@ -88,6 +88,7 @@ export async function getTenantByDomain(domain: string) {
 }
 
 // Obtener tenant por defecto (para desarrollo local o cuando no hay match de dominio)
+// Prioriza "clic" sobre otros tenants
 export async function getDefaultTenant() {
   const sql = getSQL();
   const result = await sql`
@@ -97,7 +98,9 @@ export async function getDefaultTenant() {
       COALESCE(t.info_negocio, '{}'::jsonb) as info_negocio
     FROM tenants t
     WHERE t.activo = true
-    ORDER BY t.created_at ASC
+    ORDER BY
+      CASE WHEN t.slug = 'clic' THEN 0 ELSE 1 END,
+      t.created_at DESC
     LIMIT 1
   `;
   return result[0] || null;

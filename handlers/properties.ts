@@ -1,20 +1,101 @@
 // api/handlers/properties.ts
 // Handler para propiedades - lista y detalle individual
-// Adaptado al schema real de Neon
+// Formato compatible con Supabase Edge Functions para el frontend existente
 
 import db from '../lib/db';
 import utils from '../lib/utils';
-import type {
-  PropertyListResponse,
-  SinglePropertyResponse,
-  PropertyCard,
-  Property,
-  TenantConfig,
-  SEOData
-} from '../types';
+import type { TenantConfig } from '../types';
 
 // ============================================================================
-// HANDLER: Lista de Propiedades
+// TIPOS COMPATIBLES CON SUPABASE
+// ============================================================================
+
+interface PricingUnified {
+  display_price: {
+    formatted: string;
+    amount: number;
+    currency: string;
+  };
+  operation_type: string;
+  sale?: { price: number; currency: string; formatted: string };
+  rental?: { price: number; currency: string; formatted: string };
+}
+
+interface ImagesUnified {
+  url: string;
+  optimized_url: string;
+  is_main: boolean;
+  sort_order: number;
+  title?: string;
+  position?: number;
+}
+
+interface PropertyForList {
+  id: string;
+  code: number | string;
+  name: string;
+  description: string;
+  agent_id?: string;
+  slug_url: string;
+  sale_price: number | null;
+  sale_currency: string;
+  rental_price: number | null;
+  rental_currency: string;
+  temp_rental_price: number | null;
+  temp_rental_currency: string;
+  furnished_rental_price: number | null;
+  furnished_rental_currency: string;
+  bedrooms: number;
+  bathrooms: number;
+  parking_spots: number;
+  built_area: number | null;
+  land_area: number | null;
+  main_image_url: string;
+  gallery_images_url: string;
+  property_status: string;
+  is_project: boolean;
+  delivery_date: string | null;
+  project_detail_id: string | null;
+  exact_coordinates: string | null;
+  show_exact_location: boolean;
+  property_categories: { name: string; description?: string };
+  cities: {
+    name: string;
+    coordinates: string | null;
+    provinces?: { name: string; coordinates: string | null };
+  };
+  sectors: { name: string; coordinates: string | null };
+  property_images: Array<{ url: string; title?: string; is_main: boolean; sort_order: number }>;
+  pricing_unified: PricingUnified;
+  main_image_optimized?: string;
+  images_unified: ImagesUnified[];
+  images_count: number;
+  location?: any;
+  projectDetails?: any;
+  agent?: any;
+}
+
+interface Tag {
+  id: string;
+  slug: string;
+  name: string;
+  display_name: string;
+  category: string;
+  description?: string;
+}
+
+interface Breadcrumb {
+  name: string;
+  slug?: string;
+  url: string;
+  category?: string;
+  is_active?: boolean;
+  is_current_page?: boolean;
+  position?: number;
+}
+
+// ============================================================================
+// HANDLER: Lista de Propiedades (Formato Supabase)
 // ============================================================================
 
 export async function handlePropertyList(options: {
@@ -25,12 +106,11 @@ export async function handlePropertyList(options: {
   page: number;
   limit: number;
   searchParams: URLSearchParams;
-}): Promise<PropertyListResponse> {
+}): Promise<any> {
   const { tenant, tags, language, trackingString, page, limit, searchParams } = options;
 
   // Parsear filtros desde tags y query params
   const filters = parseFiltersFromTags(tags, searchParams);
-
   console.log('[Properties Handler] Filters parsed:', filters);
 
   // Obtener propiedades usando db.getProperties
@@ -42,81 +122,91 @@ export async function handlePropertyList(options: {
     language
   });
 
-  // Convertir a PropertyCard
-  const properties: PropertyCard[] = rawProperties.map(prop =>
-    toPropertyCard(prop, language, trackingString)
+  // Convertir a formato Supabase
+  const properties: PropertyForList[] = rawProperties.map(prop =>
+    toSupabasePropertyFormat(prop, language, trackingString)
   );
 
-  // Calcular estadísticas agregadas
-  const aggregatedStats = await db.getQuickStats(tenant.id);
+  // Construir tags desde filtros activos
+  const searchTags = buildSearchTags(tags, filters, language);
+
+  // Generar breadcrumbs
+  const breadcrumbs = generateBreadcrumbs(tags, filters, language);
 
   // Generar SEO
-  const seoTitle = buildListTitle(filters, language, pagination.total_items);
-  const seoDescription = buildListDescription(filters, language, pagination.total_items);
-
-  const seo: SEOData = utils.generateSEO({
-    title: seoTitle,
-    description: seoDescription,
-    keywords: buildListKeywords(filters, language),
-    canonicalUrl: buildCanonicalUrl(tags, language),
-    ogImage: properties[0]?.main_image,
-    language,
-    siteName: tenant.name
-  });
+  const seo = generateListSEO(filters, language, tenant, pagination.total_items);
 
   // Obtener contenido relacionado
   const [faqs, testimonials] = await Promise.all([
-    db.getFAQs({ tenantId: tenant.id, limit: 5 }),
-    db.getTestimonials(tenant.id, 3)
+    db.getFAQs({ tenantId: tenant.id, limit: 8 }),
+    db.getTestimonials(tenant.id, 5)
   ]);
 
-  // Obtener propiedades destacadas para carousel
-  const featuredProperties = await db.getFeaturedProperties(tenant.id, 12);
-  const carousels = featuredProperties.length > 0 ? [{
-    id: 'featured',
-    title: language === 'en' ? 'Featured Properties' : language === 'fr' ? 'Propriétés en Vedette' : 'Propiedades Destacadas',
-    properties: featuredProperties.map(p => toPropertyCard(p, language, trackingString))
-  }] : [];
-
+  // Respuesta en formato Supabase
   return {
-    pageType: 'property-list',
-    language,
-    tenant,
-    seo,
-    trackingString,
-    properties,
-    totalProperties: pagination.total_items,
-    pagination,
-    filters: {
-      active: filters,
-      available: await getAvailableFilters(tenant.id, language)
+    type: 'property-list',
+    available: true,
+    searchResults: {
+      properties,
+      tags: searchTags,
+      searchTerms: tags,
+      pagination: {
+        currentPage: pagination.page,
+        totalCount: pagination.total_items,
+        itemsPerPage: pagination.limit,
+        totalPages: pagination.total_pages,
+        hasMore: pagination.has_next,
+        hasNextPage: pagination.has_next,
+        hasPreviousPage: pagination.has_prev
+      }
     },
-    aggregatedStats: {
-      totalCount: aggregatedStats.total_properties,
-      forSale: aggregatedStats.for_sale,
-      forRent: aggregatedStats.for_rent,
-      newThisMonth: aggregatedStats.new_this_month
-    },
-    carousels,
     relatedContent: {
-      faqs: faqs.map(f => ({
-        question: f.question,
-        answer: f.answer,
-        category: f.category
-      })),
+      articles: [],
+      videos: [],
       testimonials: testimonials.map(t => ({
         id: t.id,
         content: t.content,
-        rating: t.rating,
+        rating: t.rating || 5,
         client_name: t.client_name,
-        client_photo: t.client_photo
-      }))
+        client_photo: t.client_photo,
+        client_location: t.client_location,
+        is_featured: t.is_featured
+      })),
+      faqs: faqs.map(f => ({
+        id: f.id,
+        question: f.question,
+        answer: f.answer,
+        category: f.category,
+        order: f.order
+      })),
+      seo_content: [],
+      content_source: 'neon_db',
+      hierarchy_info: {
+        specific_count: 0,
+        tag_related_count: faqs.length + testimonials.length,
+        default_count: 0
+      }
+    },
+    referralAgent: null,
+    breadcrumbs,
+    seo,
+    countryInfo: {
+      code: tenant.regional?.country_code || 'DO',
+      name: 'República Dominicana',
+      currency: tenant.regional?.currency_default || 'USD'
+    },
+    meta: {
+      timestamp: new Date().toISOString(),
+      source: 'neon_edge_function',
+      tenant_id: tenant.id,
+      language,
+      filters_applied: Object.keys(filters).length > 0
     }
   };
 }
 
 // ============================================================================
-// HANDLER: Propiedad Individual
+// HANDLER: Propiedad Individual (Formato Supabase)
 // ============================================================================
 
 export async function handleSingleProperty(options: {
@@ -124,7 +214,7 @@ export async function handleSingleProperty(options: {
   propertySlug: string;
   language: string;
   trackingString: string;
-}): Promise<SinglePropertyResponse | null> {
+}): Promise<any | null> {
   const { tenant, propertySlug, language, trackingString } = options;
 
   // Obtener propiedad
@@ -134,83 +224,318 @@ export async function handleSingleProperty(options: {
     return null;
   }
 
-  // Construir objeto Property completo
-  const property = buildFullProperty(rawProperty, language, trackingString);
+  // Convertir a formato Supabase completo
+  const property = toSupabasePropertyFormat(rawProperty, language, trackingString);
 
   // Obtener datos relacionados en paralelo
-  const [similarProperties, faqs, testimonials] = await Promise.all([
+  const [similarProperties, agentProperties, faqs, testimonials] = await Promise.all([
     getSimilarProperties(tenant.id, rawProperty, language, trackingString),
-    db.getFAQs({ tenantId: tenant.id, limit: 5 }),
-    db.getTestimonials(tenant.id, 3)
+    getAgentProperties(tenant.id, rawProperty.agente_id, rawProperty.id, language, trackingString),
+    db.getFAQs({ tenantId: tenant.id, limit: 6 }),
+    db.getTestimonials(tenant.id, 4)
   ]);
 
-  // Construir agente desde los datos de la propiedad
-  const mainAgent = rawProperty.agente_id ? {
+  // Construir objeto agente
+  const agent = rawProperty.agente_id ? {
     id: rawProperty.agente_id,
-    slug: rawProperty.agente_slug || '',
-    full_name: `${rawProperty.agente_nombre || ''} ${rawProperty.agente_apellido || ''}`.trim(),
-    photo_url: rawProperty.agente_avatar || '',
+    name: `${rawProperty.agente_nombre || ''} ${rawProperty.agente_apellido || ''}`.trim() || 'Asesor',
     phone: rawProperty.agente_telefono || '',
-    whatsapp: rawProperty.agente_telefono || '',
     email: rawProperty.agente_email || '',
-    is_main: true
-  } : undefined;
+    position: 'Asesor Inmobiliario',
+    profile_photo_url: rawProperty.agente_avatar || rawProperty.agente_foto_url || '',
+    image: rawProperty.agente_avatar || rawProperty.agente_foto_url || '',
+    rating: 4.9,
+    external_id: rawProperty.agente_id,
+    code: rawProperty.agente_id,
+    years_experience: rawProperty.agente_experiencia_anos || 0,
+    specialty_description: '',
+    languages: rawProperty.agente_idiomas || ['Español'],
+    biography: rawProperty.agente_biografia || '',
+    slug: rawProperty.agente_slug || '',
+    social: rawProperty.agente_redes_sociales || {},
+    active: true,
+    show_on_website: true
+  } : null;
+
+  // Generar breadcrumbs para propiedad individual
+  const breadcrumbs = generatePropertyBreadcrumbs(rawProperty, language);
 
   // Generar SEO
-  const seo = generatePropertySEO(property, language, tenant);
+  const seo = generatePropertySEO(rawProperty, language, tenant);
 
+  // Construir location con coordenadas
+  const location = buildLocationData(rawProperty);
+
+  // Respuesta en formato Supabase
   return {
-    pageType: 'single-property',
-    language,
-    tenant,
-    seo,
-    trackingString,
+    type: rawProperty.is_project ? 'single-property-project' : 'single-property',
+    available: rawProperty.estado_propiedad === 'disponible',
     property,
-    agent: {
-      main: mainAgent,
-      cocaptors: [],
-      properties_count: 0,
-      should_show_properties: false
+    location,
+    projectDetails: rawProperty.is_project ? buildProjectDetails(rawProperty) : null,
+    agent,
+    referralAgent: agent,
+    agentProperties: agentProperties.map(p => ({
+      id: p.id,
+      title: p.name,
+      price: p.pricing_unified?.display_price?.formatted || 'Precio a consultar',
+      bedrooms: p.bedrooms,
+      bathrooms: p.bathrooms,
+      area: p.built_area,
+      image: p.main_image_url,
+      location: `${p.sectors?.name || ''}, ${p.cities?.name || ''}`.replace(/^, |, $/g, ''),
+      type: p.property_categories?.name,
+      url: p.slug_url,
+      is_project: p.is_project,
+      parking_spots: p.parking_spots
+    })),
+    agentPropertiesInfo: {
+      total: agentProperties.length,
+      agent_id: rawProperty.agente_id,
+      excluded_property: rawProperty.id
     },
     relatedContent: {
-      similar_properties: similarProperties,
       articles: [],
       videos: [],
-      faqs: faqs.map(f => ({
-        question: f.question,
-        answer: f.answer
-      })),
       testimonials: testimonials.map(t => ({
         id: t.id,
         content: t.content,
-        rating: t.rating,
-        client_name: t.client_name
+        rating: t.rating || 5,
+        client_name: t.client_name,
+        client_photo: t.client_photo
       })),
-      agent_properties: []
+      faqs: faqs.map(f => ({
+        id: f.id,
+        question: f.question,
+        answer: f.answer,
+        category: f.category
+      })),
+      seo_content: [],
+      content_source: 'neon_db',
+      hierarchy_info: {
+        specific_count: 0,
+        tag_related_count: 0,
+        default_count: faqs.length + testimonials.length
+      }
+    },
+    breadcrumbs,
+    similarProperties: similarProperties.map(p => ({
+      id: p.id,
+      title: p.name,
+      price: p.pricing_unified?.display_price?.formatted || 'Precio a consultar',
+      bedrooms: p.bedrooms,
+      bathrooms: p.bathrooms,
+      area: p.built_area,
+      image: p.main_image_url,
+      location: `${p.sectors?.name || ''}, ${p.cities?.name || ''}`.replace(/^, |, $/g, ''),
+      type: p.property_categories?.name,
+      url: p.slug_url,
+      is_project: p.is_project,
+      parking_spots: p.parking_spots,
+      coordinates: p.cities?.coordinates ? parseCoordinates(p.cities.coordinates) : null
+    })),
+    similarPropertiesDebug: {
+      total_found: similarProperties.length,
+      tags_used: 2,
+      search_method: 'type_and_location'
+    },
+    seo,
+    meta: {
+      timestamp: new Date().toISOString(),
+      source: 'neon_edge_function',
+      property_id: rawProperty.id,
+      tenant_id: tenant.id,
+      language
     }
   };
+}
+
+// ============================================================================
+// FUNCIONES DE CONVERSIÓN
+// ============================================================================
+
+function toSupabasePropertyFormat(prop: any, language: string, trackingString: string): PropertyForList {
+  const salePrice = prop.precio_venta ? parseFloat(prop.precio_venta) : null;
+  const rentalPrice = prop.precio_alquiler ? parseFloat(prop.precio_alquiler) : null;
+  const tempRentalPrice = prop.precio_alquiler_temporal ? parseFloat(prop.precio_alquiler_temporal) : null;
+  const furnishedRentalPrice = prop.precio_alquiler_amueblado ? parseFloat(prop.precio_alquiler_amueblado) : null;
+
+  const currency = prop.moneda_venta || prop.moneda_alquiler || prop.moneda || 'USD';
+  const operationType = salePrice ? 'venta' : 'alquiler';
+  const displayPrice = salePrice || rentalPrice || tempRentalPrice || furnishedRentalPrice || 0;
+
+  // Construir pricing_unified
+  const pricingUnified: PricingUnified = {
+    display_price: {
+      formatted: utils.formatPrice(displayPrice, currency, operationType, language),
+      amount: displayPrice,
+      currency
+    },
+    operation_type: operationType
+  };
+
+  if (salePrice) {
+    pricingUnified.sale = {
+      price: salePrice,
+      currency: prop.moneda_venta || currency,
+      formatted: utils.formatPrice(salePrice, prop.moneda_venta || currency, 'venta', language)
+    };
+  }
+
+  if (rentalPrice) {
+    pricingUnified.rental = {
+      price: rentalPrice,
+      currency: prop.moneda_alquiler || currency,
+      formatted: utils.formatPrice(rentalPrice, prop.moneda_alquiler || currency, 'alquiler', language)
+    };
+  }
+
+  // Parsear imágenes
+  const mainImage = prop.imagen_principal || '';
+  const galleryImages = parseGalleryImages(prop.galeria_imagenes || prop.imagenes);
+  const allImages = [mainImage, ...galleryImages.filter(img => img !== mainImage)].filter(Boolean);
+
+  const imagesUnified: ImagesUnified[] = allImages.map((url, index) => ({
+    url,
+    optimized_url: url,
+    is_main: index === 0,
+    sort_order: index,
+    position: index
+  }));
+
+  // Construir URL en formato Supabase
+  const slugUrl = buildPropertySlugUrl(prop, language);
+
+  return {
+    id: prop.id,
+    code: prop.codigo || prop.id,
+    name: prop.titulo || 'Propiedad sin nombre',
+    description: prop.descripcion || prop.short_description || '',
+    agent_id: prop.agente_id || prop.perfil_asesor_id,
+    slug_url: slugUrl,
+    sale_price: salePrice,
+    sale_currency: prop.moneda_venta || currency,
+    rental_price: rentalPrice,
+    rental_currency: prop.moneda_alquiler || currency,
+    temp_rental_price: tempRentalPrice,
+    temp_rental_currency: prop.moneda_alquiler_temporal || currency,
+    furnished_rental_price: furnishedRentalPrice,
+    furnished_rental_currency: prop.moneda_alquiler_amueblado || currency,
+    bedrooms: prop.habitaciones || 0,
+    bathrooms: prop.banos || 0,
+    parking_spots: prop.estacionamientos || prop.parking || 0,
+    built_area: prop.m2_construccion || prop.area_construida || null,
+    land_area: prop.m2_terreno || prop.area_total || null,
+    main_image_url: mainImage,
+    gallery_images_url: galleryImages.join(','),
+    property_status: prop.estado_propiedad || 'disponible',
+    is_project: prop.is_project || false,
+    delivery_date: prop.fecha_entrega || null,
+    project_detail_id: prop.proyecto_id || null,
+    exact_coordinates: prop.coordenadas || null,
+    show_exact_location: prop.mostrar_ubicacion_exacta || false,
+    property_categories: {
+      name: formatPropertyType(prop.tipo, language),
+      description: ''
+    },
+    cities: {
+      name: prop.ciudad || '',
+      coordinates: prop.ciudad_coordenadas || null,
+      provinces: {
+        name: prop.provincia || '',
+        coordinates: prop.provincia_coordenadas || null
+      }
+    },
+    sectors: {
+      name: prop.sector || '',
+      coordinates: prop.sector_coordenadas || null
+    },
+    property_images: imagesUnified.map(img => ({
+      url: img.url,
+      title: img.is_main ? 'Imagen Principal' : undefined,
+      is_main: img.is_main,
+      sort_order: img.sort_order
+    })),
+    pricing_unified: pricingUnified,
+    main_image_optimized: mainImage,
+    images_unified: imagesUnified,
+    images_count: allImages.length,
+    location: {
+      address: prop.direccion || '',
+      sector: prop.sector,
+      city: prop.ciudad,
+      province: prop.provincia
+    }
+  };
+}
+
+function parseGalleryImages(gallery: any): string[] {
+  if (!gallery) return [];
+
+  if (Array.isArray(gallery)) {
+    return gallery.filter(img => typeof img === 'string' && img.trim());
+  }
+
+  if (typeof gallery === 'string') {
+    try {
+      const parsed = JSON.parse(gallery);
+      if (Array.isArray(parsed)) {
+        return parsed.filter(img => typeof img === 'string' && img.trim());
+      }
+    } catch {
+      return gallery.split(',').map(s => s.trim()).filter(Boolean);
+    }
+  }
+
+  return [];
+}
+
+function buildPropertySlugUrl(prop: any, language: string): string {
+  const operation = prop.precio_venta ? 'comprar' : 'alquilar';
+  const category = utils.slugify(prop.tipo || 'propiedad');
+  const city = utils.slugify(prop.ciudad || '');
+  const sector = utils.slugify(prop.sector || '');
+  const slug = prop.slug;
+
+  let url = `/${operation}`;
+  if (category) url += `/${category}`;
+  if (city) url += `/${city}`;
+  if (sector) url += `/${sector}`;
+  url += `/${slug}`;
+
+  return utils.buildUrl(url, language);
+}
+
+function formatPropertyType(tipo: string, language: string): string {
+  const types: Record<string, Record<string, string>> = {
+    casa: { es: 'Casa', en: 'House', fr: 'Maison' },
+    apartamento: { es: 'Apartamento', en: 'Apartment', fr: 'Appartement' },
+    penthouse: { es: 'Penthouse', en: 'Penthouse', fr: 'Penthouse' },
+    villa: { es: 'Villa', en: 'Villa', fr: 'Villa' },
+    local: { es: 'Local Comercial', en: 'Commercial Space', fr: 'Local Commercial' },
+    oficina: { es: 'Oficina', en: 'Office', fr: 'Bureau' },
+    terreno: { es: 'Terreno', en: 'Land', fr: 'Terrain' }
+  };
+
+  const tipoLower = (tipo || '').toLowerCase();
+  return types[tipoLower]?.[language] || types[tipoLower]?.es || tipo || 'Propiedad';
 }
 
 // ============================================================================
 // FUNCIONES AUXILIARES
 // ============================================================================
 
-function parseFiltersFromTags(
-  tags: string[],
-  searchParams: URLSearchParams
-): Record<string, any> {
+function parseFiltersFromTags(tags: string[], searchParams: URLSearchParams): Record<string, any> {
   const filters: Record<string, any> = {};
 
-  // Mapeo de slugs de operación
   const operationSlugs: Record<string, string> = {
     'comprar': 'venta', 'buy': 'venta', 'acheter': 'venta',
     'alquilar': 'alquiler', 'rent': 'alquiler', 'louer': 'alquiler',
     'venta': 'venta', 'alquiler': 'alquiler'
   };
 
-  // Mapeo de tipos de propiedad
   const propertyTypes: Record<string, string> = {
-    'casa': 'casa', 'casas': 'casa', 'house': 'casa', 'houses': 'casa',
+    'casa': 'casa', 'casas': 'casa', 'house': 'casa',
     'apartamento': 'apartamento', 'apartamentos': 'apartamento', 'apartment': 'apartamento',
     'local': 'local', 'locales': 'local', 'commercial': 'local',
     'terreno': 'terreno', 'terrenos': 'terreno', 'land': 'terreno',
@@ -221,302 +546,350 @@ function parseFiltersFromTags(
   for (const tag of tags) {
     const tagLower = tag.toLowerCase();
 
-    // Verificar si es operación
     if (operationSlugs[tagLower]) {
       filters.operacion = operationSlugs[tagLower];
       continue;
     }
 
-    // Verificar si es tipo de propiedad
     if (propertyTypes[tagLower]) {
       filters.tipo = propertyTypes[tagLower];
       continue;
     }
 
-    // Parsear patrones de habitaciones/baños
-    const bedroomMatch = tag.match(/^(\d+)-(?:habitaciones?|bedrooms?|chambres?)$/i);
-    if (bedroomMatch) {
-      filters.habitaciones = parseInt(bedroomMatch[1], 10);
-      continue;
-    }
-
-    const bathroomMatch = tag.match(/^(\d+)-(?:banos?|bathrooms?|salles?-de-bains?)$/i);
-    if (bathroomMatch) {
-      filters.banos = parseInt(bathroomMatch[1], 10);
-      continue;
-    }
-
-    // Asumir que otros tags son ubicaciones (ciudad o sector)
+    // Ubicación
     if (tag && !filters.ciudad) {
-      // Convertir slug a nombre (reemplazar guiones por espacios)
       filters.ciudad = tag.replace(/-/g, ' ');
     } else if (tag && !filters.sector) {
       filters.sector = tag.replace(/-/g, ' ');
     }
   }
 
-  // Agregar filtros de query params
-  if (searchParams.get('min_price')) {
-    filters.minPrice = parseInt(searchParams.get('min_price')!, 10);
-  }
-  if (searchParams.get('max_price')) {
-    filters.maxPrice = parseInt(searchParams.get('max_price')!, 10);
-  }
-  if (searchParams.get('bedrooms')) {
-    filters.habitaciones = parseInt(searchParams.get('bedrooms')!, 10);
-  }
-  if (searchParams.get('bathrooms')) {
-    filters.banos = parseInt(searchParams.get('bathrooms')!, 10);
-  }
-  if (searchParams.get('tipo')) {
-    filters.tipo = searchParams.get('tipo');
-  }
-  if (searchParams.get('operacion')) {
-    filters.operacion = searchParams.get('operacion');
-  }
+  // Query params
+  if (searchParams.get('min_price')) filters.minPrice = parseInt(searchParams.get('min_price')!, 10);
+  if (searchParams.get('max_price')) filters.maxPrice = parseInt(searchParams.get('max_price')!, 10);
+  if (searchParams.get('bedrooms')) filters.habitaciones = parseInt(searchParams.get('bedrooms')!, 10);
+  if (searchParams.get('bathrooms')) filters.banos = parseInt(searchParams.get('bathrooms')!, 10);
+  if (searchParams.get('tipo')) filters.tipo = searchParams.get('tipo');
+  if (searchParams.get('operacion')) filters.operacion = searchParams.get('operacion');
 
   return filters;
 }
 
-function toPropertyCard(prop: any, language: string, trackingString: string): PropertyCard {
-  const price = prop.precio_venta || prop.precio_alquiler || prop.precio || 0;
-  const currency = prop.moneda || 'USD';
-  const operationType = prop.operacion || (prop.precio_venta ? 'venta' : 'alquiler');
+function buildSearchTags(tags: string[], filters: Record<string, any>, language: string): Tag[] {
+  const result: Tag[] = [];
+  let position = 0;
 
-  return {
-    id: prop.id,
-    slug: prop.slug,
-    code: prop.codigo,
-    title: prop.titulo,
-    location: {
-      city: prop.ciudad,
-      sector: prop.sector,
-      address: prop.direccion
-    },
-    price: {
-      amount: price,
-      currency: currency,
-      display: utils.formatPrice(price, currency, operationType, language)
-    },
-    operation_type: operationType,
-    features: {
-      bedrooms: prop.habitaciones || 0,
-      bathrooms: prop.banos || 0,
-      half_bathrooms: prop.medios_banos || 0,
-      parking_spaces: prop.estacionamientos || 0,
-      area_construction: prop.m2_construccion || 0,
-      area_total: prop.m2_terreno || 0
-    },
-    main_image: prop.imagen_principal || '',
-    is_featured: prop.destacada || false,
-    is_new: prop.created_at ? new Date(prop.created_at) > new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) : false,
-    url: utils.buildPropertyUrl(prop, language, trackingString),
-    amenity_badges: parseAmenityBadges(prop.amenidades)
-  };
-}
-
-function parseAmenityBadges(amenidades: any): Array<{ text: string; icon?: string }> {
-  if (!amenidades) return [];
-
-  try {
-    const parsed = typeof amenidades === 'string' ? JSON.parse(amenidades) : amenidades;
-    if (Array.isArray(parsed)) {
-      return parsed.slice(0, 2).map(a => ({
-        text: typeof a === 'string' ? a : a.nombre || a.name || '',
-        icon: typeof a === 'object' ? a.icono || a.icon : undefined
-      }));
-    }
-  } catch {
-    // Ignorar errores de parsing
-  }
-
-  return [];
-}
-
-function buildFullProperty(
-  raw: Record<string, any>,
-  language: string,
-  trackingString: string
-): Property {
-  const images = parseImages(raw.imagenes, raw.imagen_principal);
-  const price = raw.precio_venta || raw.precio_alquiler || raw.precio || 0;
-  const currency = raw.moneda || 'USD';
-  const operationType = raw.operacion || (raw.precio_venta ? 'venta' : 'alquiler');
-
-  // Construir todos los precios disponibles
-  const prices = [];
-  if (raw.precio_venta) {
-    prices.push({
-      type: 'sale' as const,
-      amount: raw.precio_venta,
-      currency: currency,
-      display: utils.formatPrice(raw.precio_venta, currency, 'venta', language)
+  if (filters.operacion) {
+    result.push({
+      id: `op-${filters.operacion}`,
+      slug: filters.operacion === 'venta' ? 'comprar' : 'alquilar',
+      name: filters.operacion === 'venta' ? 'Comprar' : 'Alquilar',
+      display_name: filters.operacion === 'venta' ? 'En Venta' : 'En Alquiler',
+      category: 'operacion'
     });
+    position++;
   }
-  if (raw.precio_alquiler) {
-    prices.push({
-      type: 'rental' as const,
-      amount: raw.precio_alquiler,
-      currency: currency,
-      display: utils.formatPrice(raw.precio_alquiler, currency, 'alquiler', language)
+
+  if (filters.tipo) {
+    result.push({
+      id: `type-${filters.tipo}`,
+      slug: filters.tipo,
+      name: formatPropertyType(filters.tipo, language),
+      display_name: formatPropertyType(filters.tipo, language),
+      category: 'categoria'
     });
+    position++;
   }
 
-  return {
-    id: raw.id,
-    slug: raw.slug,
-    code: raw.codigo,
-    created_at: raw.created_at,
-    updated_at: raw.updated_at,
-    tenant_id: raw.tenant_id,
-
-    title: {
-      es: raw.titulo,
-      en: raw.titulo,
-      fr: raw.titulo
-    },
-
-    description: {
-      es: raw.descripcion || raw.short_description || '',
-      en: raw.descripcion || raw.short_description || '',
-      fr: raw.descripcion || raw.short_description || ''
-    },
-
-    location: {
-      country: raw.pais,
-      province: raw.provincia,
-      city: raw.ciudad,
-      sector: raw.sector
-    },
-    address: raw.direccion,
-    coordinates: raw.latitud && raw.longitud ? {
-      lat: parseFloat(raw.latitud),
-      lng: parseFloat(raw.longitud)
-    } : undefined,
-
-    category: {
-      id: 0,
-      slug: raw.tipo,
-      name: raw.tipo
-    },
-
-    operation_type: operationType,
-
-    prices,
-    primary_price: {
-      amount: price,
-      currency: currency,
-      type: operationType,
-      display: utils.formatPrice(price, currency, operationType, language)
-    },
-
-    features: {
-      bedrooms: raw.habitaciones || 0,
-      bathrooms: raw.banos || 0,
-      half_bathrooms: raw.medios_banos || 0,
-      parking_spaces: raw.estacionamientos || 0,
-      area_construction: raw.m2_construccion || 0,
-      area_total: raw.m2_terreno || 0
-    },
-
-    images,
-    main_image: raw.imagen_principal || images[0] || '',
-
-    amenities: parseAmenities(raw.amenidades),
-    amenity_badges: parseAmenityBadges(raw.amenidades),
-
-    agents: [],
-    main_agent: undefined,
-
-    status: raw.estado_propiedad,
-    is_featured: raw.destacada || false,
-    is_project: raw.is_project || false,
-    is_new: raw.created_at ? new Date(raw.created_at) > new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) : false,
-    is_furnished: raw.is_furnished || false,
-    is_exclusive: raw.exclusiva || false,
-
-    url: utils.buildPropertyUrl(raw, language, trackingString)
-  };
-}
-
-function parseImages(imagenes: any, imagenPrincipal?: string): string[] {
-  const result: string[] = [];
-
-  if (imagenPrincipal) {
-    result.push(imagenPrincipal);
+  if (filters.ciudad) {
+    result.push({
+      id: `city-${utils.slugify(filters.ciudad)}`,
+      slug: utils.slugify(filters.ciudad),
+      name: filters.ciudad,
+      display_name: filters.ciudad,
+      category: 'ciudad'
+    });
+    position++;
   }
 
-  if (imagenes) {
-    try {
-      const parsed = typeof imagenes === 'string' ? JSON.parse(imagenes) : imagenes;
-      if (Array.isArray(parsed)) {
-        parsed.forEach(img => {
-          const url = typeof img === 'string' ? img : img.url || img.src;
-          if (url && !result.includes(url)) {
-            result.push(url);
-          }
-        });
-      }
-    } catch {
-      // Ignorar errores de parsing
-    }
+  if (filters.sector) {
+    result.push({
+      id: `sector-${utils.slugify(filters.sector)}`,
+      slug: utils.slugify(filters.sector),
+      name: filters.sector,
+      display_name: filters.sector,
+      category: 'sector'
+    });
   }
 
   return result;
 }
 
-function parseAmenities(amenidades: any): Array<{ id: number; name: string; icon?: string; category?: string }> {
-  if (!amenidades) return [];
+function generateBreadcrumbs(tags: string[], filters: Record<string, any>, language: string): Breadcrumb[] {
+  const breadcrumbs: Breadcrumb[] = [
+    { name: 'Inicio', url: '/', is_active: false, position: 0 }
+  ];
 
-  try {
-    const parsed = typeof amenidades === 'string' ? JSON.parse(amenidades) : amenidades;
-    if (Array.isArray(parsed)) {
-      return parsed.map((a, index) => ({
-        id: index,
-        name: typeof a === 'string' ? a : a.nombre || a.name || '',
-        icon: typeof a === 'object' ? a.icono || a.icon : undefined,
-        category: typeof a === 'object' ? a.categoria || a.category : undefined
-      }));
-    }
-  } catch {
-    // Ignorar errores de parsing
+  let currentPath = '';
+  let position = 1;
+
+  if (filters.operacion) {
+    const opSlug = filters.operacion === 'venta' ? 'comprar' : 'alquilar';
+    currentPath = `/${opSlug}`;
+    breadcrumbs.push({
+      name: filters.operacion === 'venta' ? 'Comprar' : 'Alquilar',
+      slug: opSlug,
+      url: currentPath,
+      category: 'operacion',
+      is_active: false,
+      position: position++
+    });
   }
 
-  return [];
+  if (filters.tipo) {
+    currentPath += `/${filters.tipo}`;
+    breadcrumbs.push({
+      name: formatPropertyType(filters.tipo, language),
+      slug: filters.tipo,
+      url: currentPath,
+      category: 'categoria',
+      is_active: false,
+      position: position++
+    });
+  }
+
+  if (filters.ciudad) {
+    const citySlug = utils.slugify(filters.ciudad);
+    currentPath += `/${citySlug}`;
+    breadcrumbs.push({
+      name: filters.ciudad,
+      slug: citySlug,
+      url: currentPath,
+      category: 'ciudad',
+      is_active: false,
+      position: position++
+    });
+  }
+
+  if (filters.sector) {
+    const sectorSlug = utils.slugify(filters.sector);
+    currentPath += `/${sectorSlug}`;
+    breadcrumbs.push({
+      name: filters.sector,
+      slug: sectorSlug,
+      url: currentPath,
+      category: 'sector',
+      is_active: true,
+      is_current_page: true,
+      position: position++
+    });
+  }
+
+  // Marcar último como activo si no hay sector
+  if (breadcrumbs.length > 1 && !filters.sector) {
+    breadcrumbs[breadcrumbs.length - 1].is_active = true;
+    breadcrumbs[breadcrumbs.length - 1].is_current_page = true;
+  }
+
+  return breadcrumbs;
+}
+
+function generatePropertyBreadcrumbs(prop: any, language: string): Breadcrumb[] {
+  const breadcrumbs: Breadcrumb[] = [
+    { name: 'Inicio', url: '/', is_active: false, position: 0 },
+    { name: 'Propiedades', url: '/comprar', is_active: false, position: 1 }
+  ];
+
+  let currentPath = '/comprar';
+  let position = 2;
+
+  if (prop.tipo) {
+    currentPath += `/${prop.tipo}`;
+    breadcrumbs.push({
+      name: formatPropertyType(prop.tipo, language),
+      slug: prop.tipo,
+      url: currentPath,
+      category: 'categoria',
+      is_active: false,
+      position: position++
+    });
+  }
+
+  if (prop.ciudad) {
+    const citySlug = utils.slugify(prop.ciudad);
+    currentPath += `/${citySlug}`;
+    breadcrumbs.push({
+      name: prop.ciudad,
+      slug: citySlug,
+      url: currentPath,
+      category: 'ciudad',
+      is_active: false,
+      position: position++
+    });
+  }
+
+  if (prop.sector) {
+    const sectorSlug = utils.slugify(prop.sector);
+    currentPath += `/${sectorSlug}`;
+    breadcrumbs.push({
+      name: prop.sector,
+      slug: sectorSlug,
+      url: currentPath,
+      category: 'sector',
+      is_active: false,
+      position: position++
+    });
+  }
+
+  breadcrumbs.push({
+    name: prop.titulo || 'Propiedad',
+    url: prop.slug_url || '#',
+    is_active: true,
+    is_current_page: true,
+    position: position
+  });
+
+  return breadcrumbs;
+}
+
+function generateListSEO(filters: Record<string, any>, language: string, tenant: TenantConfig, total: number): any {
+  const parts: string[] = [];
+
+  if (filters.tipo) {
+    parts.push(formatPropertyType(filters.tipo, language));
+  } else {
+    parts.push('Propiedades');
+  }
+
+  if (filters.operacion === 'venta') {
+    parts.push('en Venta');
+  } else if (filters.operacion === 'alquiler') {
+    parts.push('en Alquiler');
+  }
+
+  if (filters.ciudad) {
+    parts.push(`en ${filters.ciudad}`);
+  }
+
+  const title = `${parts.join(' ')} | ${tenant.name}`;
+  const description = `Encuentra ${total} ${parts[0].toLowerCase()} disponibles ${parts.slice(1).join(' ')}. Amplia selección con fotos, precios y características.`;
+
+  return {
+    title,
+    description,
+    h1: parts.join(' '),
+    keywords: parts.map(p => p.toLowerCase()).join(', ') + ', inmobiliaria, bienes raíces',
+    og: {
+      title,
+      description,
+      type: 'website'
+    }
+  };
+}
+
+function generatePropertySEO(prop: any, language: string, tenant: TenantConfig): any {
+  const title = prop.titulo || 'Propiedad';
+  const location = [prop.sector, prop.ciudad].filter(Boolean).join(', ');
+  const price = utils.formatPrice(
+    prop.precio_venta || prop.precio_alquiler || 0,
+    prop.moneda_venta || prop.moneda_alquiler || 'USD',
+    prop.precio_venta ? 'venta' : 'alquiler',
+    language
+  );
+
+  const seoTitle = `${title} | ${price} | ${tenant.name}`;
+  const description = prop.descripcion
+    ? prop.descripcion.replace(/<[^>]*>/g, '').substring(0, 155)
+    : `${title} en ${location}. ${prop.habitaciones || 0} hab, ${prop.banos || 0} baños. ${price}`;
+
+  return {
+    title: seoTitle,
+    description,
+    h1: title,
+    keywords: `${title}, ${location}, ${prop.tipo || 'propiedad'}, inmobiliaria`.toLowerCase(),
+    og: {
+      title: seoTitle,
+      description,
+      image: prop.imagen_principal,
+      type: 'website'
+    },
+    structured_data: {
+      '@context': 'https://schema.org',
+      '@type': 'RealEstateListing',
+      name: title,
+      description,
+      price: prop.precio_venta || prop.precio_alquiler,
+      priceCurrency: prop.moneda_venta || prop.moneda_alquiler || 'USD'
+    }
+  };
+}
+
+function buildLocationData(prop: any): any {
+  const coordinates = parseCoordinates(prop.coordenadas || prop.ciudad_coordenadas);
+
+  return {
+    coordinates,
+    hasExactCoordinates: !!prop.coordenadas,
+    showExactLocation: prop.mostrar_ubicacion_exacta || false,
+    coordinatesSource: prop.coordenadas ? 'property' : prop.ciudad_coordenadas ? 'city' : 'none',
+    address: prop.direccion || '',
+    sector: prop.sector,
+    city: prop.ciudad,
+    province: prop.provincia,
+    mapConfig: {
+      zoom: coordinates ? 15 : 10,
+      showMarker: !!coordinates,
+      showAreaCircle: !prop.mostrar_ubicacion_exacta && !!coordinates,
+      circleRadius: 500
+    }
+  };
+}
+
+function parseCoordinates(coordString: string | null): { lat: number; lng: number } | null {
+  if (!coordString) return null;
+
+  // Formato PostGIS: "(-70.123,18.456)"
+  const match = coordString.match(/\(([-\d.]+),([-\d.]+)\)/);
+  if (match) {
+    return {
+      lng: parseFloat(match[1]),
+      lat: parseFloat(match[2])
+    };
+  }
+
+  return null;
+}
+
+function buildProjectDetails(prop: any): any {
+  if (!prop.is_project) return null;
+
+  return {
+    id: prop.proyecto_id,
+    name: prop.proyecto_nombre || prop.titulo,
+    status: {
+      construction: prop.estado_construccion || 'En construcción',
+      sales: 'En venta',
+      completion: prop.fecha_entrega
+    }
+  };
 }
 
 async function getSimilarProperties(
   tenantId: string,
-  property: Record<string, any>,
+  property: any,
   language: string,
   trackingString: string
-): Promise<PropertyCard[]> {
+): Promise<PropertyForList[]> {
   const sql = db.getSQL();
 
-  // Buscar propiedades similares por tipo, ciudad o sector
   const similar = await sql`
     SELECT
-      p.id,
-      p.slug,
-      p.codigo,
-      p.titulo,
-      p.tipo,
-      p.operacion,
-      p.precio,
-      p.precio_venta,
-      p.precio_alquiler,
-      p.moneda,
-      p.ciudad,
-      p.sector,
-      p.direccion,
-      p.habitaciones,
-      p.banos,
-      p.estacionamientos,
-      p.m2_construccion,
-      p.m2_terreno,
-      p.imagen_principal,
-      p.destacada,
-      p.created_at
+      p.id, p.slug, p.codigo, p.titulo, p.tipo, p.operacion,
+      p.precio, p.precio_venta, p.precio_alquiler, p.moneda,
+      p.ciudad, p.sector, p.direccion, p.habitaciones, p.banos,
+      p.estacionamientos, p.m2_construccion, p.m2_terreno,
+      p.imagen_principal, p.destacada, p.created_at, p.is_project,
+      p.estado_propiedad
     FROM propiedades p
     WHERE p.tenant_id = ${tenantId}
       AND p.activo = true
@@ -534,118 +907,39 @@ async function getSimilarProperties(
     LIMIT 6
   `;
 
-  return similar.map(p => toPropertyCard(p, language, trackingString));
+  return similar.map(p => toSupabasePropertyFormat(p, language, trackingString));
 }
 
-async function getAvailableFilters(tenantId: string, language: string) {
-  const { cities, sectors } = await db.getPopularLocations(tenantId);
+async function getAgentProperties(
+  tenantId: string,
+  agentId: string | null,
+  excludePropertyId: string,
+  language: string,
+  trackingString: string
+): Promise<PropertyForList[]> {
+  if (!agentId) return [];
 
-  return {
-    categories: [], // El schema no tiene categorías separadas, usa el campo tipo
-    propertyTypes: [
-      { slug: 'casa', name: language === 'en' ? 'House' : 'Casa' },
-      { slug: 'apartamento', name: language === 'en' ? 'Apartment' : 'Apartamento' },
-      { slug: 'local', name: language === 'en' ? 'Commercial' : 'Local' },
-      { slug: 'terreno', name: language === 'en' ? 'Land' : 'Terreno' },
-      { slug: 'oficina', name: language === 'en' ? 'Office' : 'Oficina' },
-      { slug: 'penthouse', name: 'Penthouse' },
-      { slug: 'villa', name: 'Villa' }
-    ],
-    locations: [
-      ...cities.map((c: any) => ({ slug: c.slug, name: c.name, type: 'ciudad', count: parseInt(c.count, 10) })),
-      ...sectors.map((s: any) => ({ slug: s.slug, name: s.name, type: 'sector', count: parseInt(s.count, 10) }))
-    ],
-    operations: [
-      { slug: language === 'es' ? 'comprar' : language === 'en' ? 'buy' : 'acheter', value: 'venta' },
-      { slug: language === 'es' ? 'alquilar' : language === 'en' ? 'rent' : 'louer', value: 'alquiler' }
-    ]
-  };
-}
+  const sql = db.getSQL();
 
-function buildListTitle(filters: Record<string, any>, language: string, total: number): string {
-  const parts: string[] = [];
+  const properties = await sql`
+    SELECT
+      p.id, p.slug, p.codigo, p.titulo, p.tipo, p.operacion,
+      p.precio, p.precio_venta, p.precio_alquiler, p.moneda,
+      p.ciudad, p.sector, p.direccion, p.habitaciones, p.banos,
+      p.estacionamientos, p.m2_construccion, p.m2_terreno,
+      p.imagen_principal, p.destacada, p.created_at, p.is_project,
+      p.estado_propiedad
+    FROM propiedades p
+    WHERE p.tenant_id = ${tenantId}
+      AND p.activo = true
+      AND p.estado_propiedad = 'disponible'
+      AND p.id != ${excludePropertyId}
+      AND (p.agente_id = ${agentId} OR p.perfil_asesor_id::text = ${agentId})
+    ORDER BY p.destacada DESC, p.created_at DESC
+    LIMIT 6
+  `;
 
-  const texts = {
-    es: {
-      properties: 'Propiedades',
-      forSale: 'en Venta',
-      forRent: 'en Alquiler'
-    },
-    en: {
-      properties: 'Properties',
-      forSale: 'for Sale',
-      forRent: 'for Rent'
-    },
-    fr: {
-      properties: 'Propriétés',
-      forSale: 'à Vendre',
-      forRent: 'à Louer'
-    }
-  };
-
-  const t = texts[language as keyof typeof texts] || texts.es;
-
-  parts.push(t.properties);
-
-  if (filters.operacion === 'venta') {
-    parts.push(t.forSale);
-  } else if (filters.operacion === 'alquiler') {
-    parts.push(t.forRent);
-  }
-
-  if (filters.ciudad) {
-    parts.push(`en ${filters.ciudad}`);
-  }
-
-  return parts.join(' ');
-}
-
-function buildListDescription(filters: Record<string, any>, language: string, total: number): string {
-  const texts = {
-    es: `Encuentra ${total} propiedades disponibles. Amplia selección de inmuebles con fotos, precios y características detalladas.`,
-    en: `Find ${total} available properties. Wide selection of real estate with photos, prices and detailed features.`,
-    fr: `Trouvez ${total} propriétés disponibles. Large sélection de biens immobiliers avec photos, prix et caractéristiques détaillées.`
-  };
-
-  return texts[language as keyof typeof texts] || texts.es;
-}
-
-function buildListKeywords(filters: Record<string, any>, language: string): string {
-  const baseKeywords = {
-    es: 'propiedades, inmuebles, bienes raíces, casas, apartamentos',
-    en: 'properties, real estate, homes, apartments, houses',
-    fr: 'propriétés, immobilier, maisons, appartements'
-  };
-
-  return baseKeywords[language as keyof typeof baseKeywords] || baseKeywords.es;
-}
-
-function buildCanonicalUrl(tags: string[], language: string): string {
-  const path = '/' + tags.filter(Boolean).join('/');
-  return utils.buildUrl(path, language);
-}
-
-function generatePropertySEO(property: Property, language: string, tenant: TenantConfig): SEOData {
-  const title = property.title.es || property.title.en || '';
-  const location = [property.location.sector, property.location.city].filter(Boolean).join(', ');
-
-  const seoTitle = `${title} | ${property.primary_price.display} | ${tenant.name}`;
-
-  const description = property.description.es || property.description.en || '';
-  const seoDescription = description
-    ? description.substring(0, 150)
-    : `${title} en ${location}. ${property.features.bedrooms} hab, ${property.features.bathrooms} baños. ${property.primary_price.display}`;
-
-  return utils.generateSEO({
-    title: seoTitle,
-    description: seoDescription,
-    keywords: `${title}, ${location}, ${property.category.name}, inmuebles`,
-    canonicalUrl: property.url,
-    ogImage: property.main_image,
-    language,
-    type: 'property',
-    siteName: tenant.name
-  });
+  return properties.map(p => toSupabasePropertyFormat(p, language, trackingString));
 }
 
 export default {

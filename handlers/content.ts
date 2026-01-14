@@ -37,7 +37,7 @@ export async function handleTestimonials(options: {
   const seo = generateTestimonialsSEO(language, tenant, total);
 
   return {
-    pageType: 'testimonials-main',
+    type: 'testimonials-main',
     language,
     tenant,
     seo,
@@ -94,7 +94,7 @@ export async function handleFAQs(options: {
   const seo = generateFAQsSEO(language, tenant, faqs.length);
 
   return {
-    pageType: 'faqs',
+    type: 'faqs',
     language,
     tenant,
     seo,

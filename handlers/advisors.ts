@@ -38,7 +38,7 @@ export async function handleAdvisorsList(options: {
   const seo = generateAdvisorsListSEO(language, tenant, total);
 
   return {
-    pageType: 'advisors-list',
+    type: 'advisors-list',
     language,
     tenant,
     seo,
@@ -121,7 +121,7 @@ export async function handleSingleAdvisor(options: {
   const seo = generateSingleAdvisorSEO(advisor, language, tenant, propertyCards.length);
 
   return {
-    pageType: 'advisor-single',
+    type: 'advisor-single',
     language,
     tenant,
     seo,
