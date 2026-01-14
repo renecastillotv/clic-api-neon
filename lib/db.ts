@@ -156,7 +156,17 @@ export async function getProperties(options: {
   const { tenantId, filters = {}, page = 1, limit = 32 } = options;
   const offset = (page - 1) * limit;
 
-  // Query base - el schema usa campos directos, no JOINs con ubicaciones
+  // Construir condiciones de filtro
+  const operacion = filters.operacion || null;
+  const tipo = filters.tipo || null;
+  const ciudad = filters.ciudad || null;
+  const sector = filters.sector || null;
+  const minPrice = filters.minPrice || 0;
+  const maxPrice = filters.maxPrice || 999999999;
+  const habitaciones = filters.habitaciones || 0;
+  const banos = filters.banos || 0;
+
+  // Query base - sin condiciones dinámicas anidadas
   const properties = await sql`
     SELECT
       p.id,
@@ -199,14 +209,14 @@ export async function getProperties(options: {
     WHERE p.tenant_id = ${tenantId}
       AND p.activo = true
       AND p.estado_propiedad = 'disponible'
-      ${filters.operacion ? sql`AND p.operacion = ${filters.operacion}` : sql``}
-      ${filters.tipo ? sql`AND p.tipo = ${filters.tipo}` : sql``}
-      ${filters.ciudad ? sql`AND LOWER(p.ciudad) = LOWER(${filters.ciudad})` : sql``}
-      ${filters.sector ? sql`AND LOWER(p.sector) = LOWER(${filters.sector})` : sql``}
-      ${filters.minPrice ? sql`AND COALESCE(p.precio_venta, p.precio_alquiler, p.precio) >= ${filters.minPrice}` : sql``}
-      ${filters.maxPrice ? sql`AND COALESCE(p.precio_venta, p.precio_alquiler, p.precio) <= ${filters.maxPrice}` : sql``}
-      ${filters.habitaciones ? sql`AND p.habitaciones >= ${filters.habitaciones}` : sql``}
-      ${filters.banos ? sql`AND p.banos >= ${filters.banos}` : sql``}
+      AND (${operacion}::text IS NULL OR p.operacion = ${operacion})
+      AND (${tipo}::text IS NULL OR p.tipo = ${tipo})
+      AND (${ciudad}::text IS NULL OR LOWER(p.ciudad) = LOWER(${ciudad}))
+      AND (${sector}::text IS NULL OR LOWER(p.sector) = LOWER(${sector}))
+      AND COALESCE(p.precio_venta, p.precio_alquiler, p.precio, 0) >= ${minPrice}
+      AND COALESCE(p.precio_venta, p.precio_alquiler, p.precio, 999999999) <= ${maxPrice}
+      AND COALESCE(p.habitaciones, 0) >= ${habitaciones}
+      AND COALESCE(p.banos, 0) >= ${banos}
     ORDER BY p.destacada DESC, p.created_at DESC
     LIMIT ${limit} OFFSET ${offset}
   `;
@@ -218,14 +228,14 @@ export async function getProperties(options: {
     WHERE p.tenant_id = ${tenantId}
       AND p.activo = true
       AND p.estado_propiedad = 'disponible'
-      ${filters.operacion ? sql`AND p.operacion = ${filters.operacion}` : sql``}
-      ${filters.tipo ? sql`AND p.tipo = ${filters.tipo}` : sql``}
-      ${filters.ciudad ? sql`AND LOWER(p.ciudad) = LOWER(${filters.ciudad})` : sql``}
-      ${filters.sector ? sql`AND LOWER(p.sector) = LOWER(${filters.sector})` : sql``}
-      ${filters.minPrice ? sql`AND COALESCE(p.precio_venta, p.precio_alquiler, p.precio) >= ${filters.minPrice}` : sql``}
-      ${filters.maxPrice ? sql`AND COALESCE(p.precio_venta, p.precio_alquiler, p.precio) <= ${filters.maxPrice}` : sql``}
-      ${filters.habitaciones ? sql`AND p.habitaciones >= ${filters.habitaciones}` : sql``}
-      ${filters.banos ? sql`AND p.banos >= ${filters.banos}` : sql``}
+      AND (${operacion}::text IS NULL OR p.operacion = ${operacion})
+      AND (${tipo}::text IS NULL OR p.tipo = ${tipo})
+      AND (${ciudad}::text IS NULL OR LOWER(p.ciudad) = LOWER(${ciudad}))
+      AND (${sector}::text IS NULL OR LOWER(p.sector) = LOWER(${sector}))
+      AND COALESCE(p.precio_venta, p.precio_alquiler, p.precio, 0) >= ${minPrice}
+      AND COALESCE(p.precio_venta, p.precio_alquiler, p.precio, 999999999) <= ${maxPrice}
+      AND COALESCE(p.habitaciones, 0) >= ${habitaciones}
+      AND COALESCE(p.banos, 0) >= ${banos}
   `;
 
   const total = parseInt(countResult[0]?.total || '0', 10);
@@ -265,82 +275,128 @@ export async function getPropertyBySlug(slug: string, tenantId: string) {
   return result[0] || null;
 }
 
-// Obtener agente/usuario por slug
+// Obtener agente/usuario por slug usando perfiles_asesor
 export async function getAdvisorBySlug(slug: string, tenantId: string) {
   const sql = getSQL();
   const result = await sql`
     SELECT
-      u.*,
+      pa.id as perfil_id,
+      pa.slug,
+      pa.titulo_profesional,
+      pa.biografia,
+      pa.foto_url,
+      pa.especialidades,
+      pa.idiomas,
+      pa.zonas,
+      pa.experiencia_anos,
+      pa.rango,
+      pa.stats,
+      pa.redes_sociales,
+      pa.whatsapp,
+      pa.telefono_directo,
+      pa.certificaciones,
+      pa.logros,
+      pa.destacado,
+      pa.visible_en_web,
+      u.id as usuario_id,
+      u.nombre,
+      u.apellido,
+      u.email,
+      u.telefono,
+      u.avatar_url,
       ut.es_owner,
       (
         SELECT COUNT(*)
         FROM propiedades p
-        WHERE p.agente_id = u.id
+        WHERE (p.perfil_asesor_id = pa.id OR p.captador_id = u.id OR p.agente_id = u.id)
           AND p.activo = true
           AND p.estado_propiedad = 'disponible'
       ) as propiedades_count
-    FROM usuarios u
+    FROM perfiles_asesor pa
+    JOIN usuarios u ON pa.usuario_id = u.id
     JOIN usuarios_tenants ut ON u.id = ut.usuario_id AND ut.tenant_id = ${tenantId}
-    WHERE u.slug = ${slug}
+    WHERE pa.slug = ${slug}
+      AND pa.tenant_id = ${tenantId}
+      AND pa.activo = true
       AND u.activo = true
     LIMIT 1
   `;
   return result[0] || null;
 }
 
-// Obtener lista de asesores del tenant
+// Obtener lista de asesores del tenant usando perfiles_asesor
 export async function getAdvisors(tenantId: string, limit: number = 50) {
   const sql = getSQL();
   return sql`
     SELECT
-      u.id,
-      u.slug,
+      pa.id as perfil_id,
+      pa.slug,
+      pa.titulo_profesional,
+      pa.biografia,
+      pa.foto_url,
+      pa.especialidades,
+      pa.idiomas,
+      pa.zonas,
+      pa.experiencia_anos,
+      pa.rango,
+      pa.stats,
+      pa.redes_sociales,
+      pa.whatsapp,
+      pa.telefono_directo,
+      pa.destacado,
+      pa.orden,
+      u.id as usuario_id,
       u.nombre,
       u.apellido,
       u.email,
       u.telefono,
-      u.avatar,
-      u.bio,
+      u.avatar_url,
       ut.es_owner,
       (
         SELECT COUNT(*)
         FROM propiedades p
-        WHERE p.agente_id = u.id
+        WHERE (p.perfil_asesor_id = pa.id OR p.captador_id = u.id OR p.agente_id = u.id)
           AND p.activo = true
           AND p.estado_propiedad = 'disponible'
       ) as propiedades_count
-    FROM usuarios u
+    FROM perfiles_asesor pa
+    JOIN usuarios u ON pa.usuario_id = u.id
     JOIN usuarios_tenants ut ON u.id = ut.usuario_id AND ut.tenant_id = ${tenantId}
-    WHERE u.activo = true
-      AND ut.activo = true
-    ORDER BY ut.es_owner DESC, u.nombre ASC
+    WHERE pa.tenant_id = ${tenantId}
+      AND pa.activo = true
+      AND pa.visible_en_web = true
+      AND u.activo = true
+    ORDER BY pa.destacado DESC, pa.orden ASC, u.nombre ASC
     LIMIT ${limit}
   `;
 }
 
-// Obtener testimonios (usando mock_testimonios que tiene tenant_id)
+// Obtener testimonios usando la tabla real testimonios
 export async function getTestimonials(tenantId: string, limit: number = 10) {
   const sql = getSQL();
   return sql`
     SELECT
       t.id,
-      t.nombre_cliente as client_name,
-      t.ubicacion as client_location,
-      t.testimonio as content,
-      t.calificacion as rating,
-      t.foto_url as client_photo,
-      t.tipo_propiedad as property_type,
+      t.slug,
+      t.cliente_nombre as client_name,
+      t.cliente_ubicacion as client_location,
+      t.contenido as content,
+      t.titulo as title,
+      t.rating,
+      t.cliente_foto as client_photo,
       t.destacado as is_featured,
-      t.fecha as created_at
-    FROM mock_testimonios t
+      t.fecha as created_at,
+      t.traducciones as translations,
+      t.propiedad_id
+    FROM testimonios t
     WHERE t.tenant_id = ${tenantId}
-      AND t.activo = true
+      AND t.publicado = true
     ORDER BY t.destacado DESC, t.fecha DESC
     LIMIT ${limit}
   `;
 }
 
-// Obtener FAQs (usando mock_faqs que tiene tenant_id)
+// Obtener FAQs usando la tabla real faqs
 export async function getFAQs(options: {
   tenantId: string;
   limit?: number;
@@ -350,16 +406,19 @@ export async function getFAQs(options: {
 
   return sql`
     SELECT
-      id,
-      pregunta as question,
-      respuesta as answer,
-      categoria as category,
-      orden as "order",
-      traducciones as translations
-    FROM mock_faqs
-    WHERE tenant_id = ${tenantId}
-      AND activo = true
-    ORDER BY orden ASC
+      f.id,
+      f.slug,
+      f.pregunta as question,
+      f.respuesta as answer,
+      f.categoria_id,
+      f.contexto as category,
+      f.orden as "order",
+      f.traducciones as translations,
+      f.destacada as is_featured
+    FROM faqs f
+    WHERE f.tenant_id = ${tenantId}
+      AND f.publicado = true
+    ORDER BY f.orden ASC, f.destacada DESC
     LIMIT ${limit}
   `;
 }
