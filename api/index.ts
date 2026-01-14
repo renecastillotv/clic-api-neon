@@ -10,6 +10,7 @@ import propertiesHandler from '../handlers/properties';
 import contentHandler from '../handlers/content';
 import advisorsHandler from '../handlers/advisors';
 import homepageHandler from '../handlers/homepage';
+import articlesHandler from '../handlers/articles';
 
 import type { TenantConfig, ApiResponse, Error404Response } from '../types';
 
@@ -202,19 +203,28 @@ export default async function handler(request: Request): Promise<Response> {
         break;
 
       case 'articles':
-        // Artículos no implementados en el schema actual
-        response = {
-          type: 'articles-main',
-          language,
+        // Estructura: /articulos, /articulos/categoria, /articulos/categoria/slug-articulo
+        // segments[0] = 'articulos' o 'articles'
+        // segments[1] = categorySlug (si existe)
+        // segments[2] = articleSlug (si existe)
+        const articleCategorySlug = segments.length >= 2 ? segments[1] : undefined;
+        const articleSlug = segments.length >= 3 ? segments[2] : undefined;
+
+        const articlesResult = await articlesHandler.handleArticles({
           tenant,
-          seo: utils.generateSEO({
-            title: 'Artículos',
-            description: 'Artículos sobre bienes raíces',
-            language,
-          }),
+          slug: articleSlug,
+          categorySlug: articleCategorySlug,
+          language,
           trackingString,
-          articles: [],
-        } as any;
+          page,
+          limit,
+        });
+
+        if (articlesResult.type === '404') {
+          response = build404Response(tenant, language, trackingString);
+        } else {
+          response = articlesResult as any;
+        }
         break;
 
       case 'videos':
