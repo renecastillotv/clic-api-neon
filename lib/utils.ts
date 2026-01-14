@@ -90,9 +90,12 @@ function getCurrencyFormatter(currency: string, locale: string): Intl.NumberForm
 export function formatPrice(
   amount: number,
   currency: string,
-  type: 'sale' | 'rental' | 'temp_rental' | 'furnished_rental' = 'sale',
+  type: 'sale' | 'rental' | 'temp_rental' | 'furnished_rental' | 'venta' | 'alquiler' | string = 'sale',
   language: string = 'es'
 ): string {
+  // Normalizar tipo
+  if (type === 'venta') type = 'sale';
+  if (type === 'alquiler') type = 'rental';
   if (!amount || amount <= 0) {
     const texts = {
       es: 'Consultar precio',

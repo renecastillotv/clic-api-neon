@@ -7,10 +7,10 @@
 // ============================================================================
 
 export interface BaseEntity {
-  id: number;
-  created_at: string;
-  updated_at: string;
-  tenant_id?: number;
+  id: number | string; // UUID en Neon
+  created_at?: string;
+  updated_at?: string;
+  tenant_id?: string; // UUID en Neon
 }
 
 export interface MultilingualText {
@@ -183,17 +183,33 @@ export interface Property extends BaseEntity {
 
 // Versión ligera para listados
 export interface PropertyCard {
-  id: number;
+  id: number | string;
   slug: string;
+  code?: string;
   title: string;
-  location_display: string;
+  location_display?: string; // Alternativo a location
+  location?: {
+    city?: string;
+    sector?: string;
+    address?: string;
+  };
   main_image: string;
-  price_display: string;
-  operation_display: string;
+  price_display?: string; // Alternativo a price
+  price?: {
+    amount: number;
+    currency: string;
+    display: string;
+  };
+  operation_display?: string;
+  operation_type?: string;
   features: {
     bedrooms: number;
     bathrooms: number;
-    area: number;
+    half_bathrooms?: number;
+    parking_spaces?: number;
+    area?: number;
+    area_construction?: number;
+    area_total?: number;
   };
   amenity_badges: Array<{ text: string; icon?: string }>;
   url: string;
@@ -421,10 +437,11 @@ export interface HotItems {
 // ============================================================================
 
 export interface TenantConfig {
-  id: number;
+  id: string; // UUID en Neon
   slug: string;
   name: string;
   domain: string;
+  config?: Record<string, any>; // Para acceder a configuración JSONB
 
   // Configuración visual
   branding: {
