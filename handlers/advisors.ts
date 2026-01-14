@@ -94,6 +94,10 @@ export async function handleSingleAdvisor(options: {
   const advisor = processAdvisor(rawAdvisor, language, trackingString);
 
   // Obtener propiedades del asesor - adaptado al schema real
+  // El asesor puede estar vinculado por perfil_asesor_id, captador_id o agente_id
+  const perfilId = rawAdvisor.perfil_id || rawAdvisor.id;
+  const usuarioId = rawAdvisor.usuario_id || rawAdvisor.id;
+
   const properties = await sql`
     SELECT
       p.id,
@@ -106,8 +110,11 @@ export async function handleSingleAdvisor(options: {
       p.precio_venta,
       p.precio_alquiler,
       p.moneda,
+      p.moneda_venta,
+      p.moneda_alquiler,
       p.ciudad,
       p.sector,
+      p.provincia,
       p.direccion,
       p.habitaciones,
       p.banos,
@@ -118,7 +125,11 @@ export async function handleSingleAdvisor(options: {
       p.destacada,
       p.created_at
     FROM propiedades p
-    WHERE p.agente_id = ${rawAdvisor.id}
+    WHERE (
+      p.perfil_asesor_id = ${perfilId}
+      OR p.captador_id = ${usuarioId}
+      OR p.agente_id = ${usuarioId}
+    )
       AND p.tenant_id = ${tenant.id}
       AND p.activo = true
       AND p.estado_propiedad = 'disponible'
