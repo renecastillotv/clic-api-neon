@@ -81,28 +81,34 @@ export async function transaction<T>(
 // Obtener configuración del tenant por dominio
 export async function getTenantByDomain(domain: string) {
   const sql = getSQL();
+  // Limpiar el dominio (quitar puerto si existe)
+  const cleanDomain = domain.split(':')[0];
+
   const result = await sql`
     SELECT
       t.*,
-      COALESCE(t.configuracion, '{}'::jsonb) as config
+      COALESCE(t.configuracion, '{}'::jsonb) as config,
+      COALESCE(t.info_negocio, '{}'::jsonb) as info_negocio
     FROM tenants t
-    WHERE t.dominio_principal = ${domain}
-       OR ${domain} = ANY(t.dominios_alternativos)
-       OR t.dominio_principal LIKE ${'%' + domain}
+    WHERE t.dominio_personalizado = ${cleanDomain}
+       OR t.dominio_personalizado LIKE ${'%' + cleanDomain}
+       OR t.slug = ${cleanDomain}
     LIMIT 1
   `;
   return result[0] || null;
 }
 
-// Obtener tenant por defecto (para desarrollo local)
+// Obtener tenant por defecto (para desarrollo local o cuando no hay match de dominio)
 export async function getDefaultTenant() {
   const sql = getSQL();
   const result = await sql`
     SELECT
       t.*,
-      COALESCE(t.configuracion, '{}'::jsonb) as config
+      COALESCE(t.configuracion, '{}'::jsonb) as config,
+      COALESCE(t.info_negocio, '{}'::jsonb) as info_negocio
     FROM tenants t
-    WHERE t.es_principal = true
+    WHERE t.activo = true
+    ORDER BY t.created_at ASC
     LIMIT 1
   `;
   return result[0] || null;

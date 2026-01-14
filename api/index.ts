@@ -393,28 +393,29 @@ async function getTenantConfig(domain: string): Promise<TenantConfig | null> {
 
   // Parsear configuración JSONB
   const config = tenantData.config || tenantData.configuracion || {};
+  const infoNegocio = tenantData.info_negocio || {};
 
   return {
-    id: tenantData.id,
+    id: tenantData.id, // UUID string
     slug: tenantData.slug,
-    name: tenantData.nombre || config.company_name || 'Inmobiliaria',
-    domain: tenantData.dominio_principal || domain,
+    name: tenantData.nombre || infoNegocio.nombre_comercial || config.company_name || 'Inmobiliaria',
+    domain: tenantData.dominio_personalizado || domain,
 
     branding: {
-      logo_url: config.logo_url,
+      logo_url: config.logo_url || infoNegocio.logo_url,
       favicon_url: config.favicon_url,
-      primary_color: config.primary_color,
-      secondary_color: config.secondary_color,
+      primary_color: config.primary_color || infoNegocio.color_primario,
+      secondary_color: config.secondary_color || infoNegocio.color_secundario,
     },
 
     contact: {
-      phone: config.phone || tenantData.telefono,
-      whatsapp: config.whatsapp,
-      email: config.email || tenantData.email,
-      address: config.address || tenantData.direccion,
+      phone: infoNegocio.telefono || config.phone,
+      whatsapp: infoNegocio.whatsapp || config.whatsapp,
+      email: infoNegocio.email || config.email,
+      address: infoNegocio.direccion || config.address,
     },
 
-    social: config.social || {},
+    social: infoNegocio.redes_sociales || config.social || {},
 
     features: {
       vacation_rentals: config.features?.vacation_rentals !== false,
@@ -427,16 +428,16 @@ async function getTenantConfig(domain: string): Promise<TenantConfig | null> {
     },
 
     legal: {
-      company_name: config.legal?.company_name || tenantData.nombre,
-      company_id: config.legal?.company_id,
+      company_name: infoNegocio.razon_social || config.legal?.company_name || tenantData.nombre,
+      company_id: infoNegocio.rnc || config.legal?.company_id,
       terms_url: config.legal?.terms_url,
       privacy_url: config.legal?.privacy_url,
     },
 
     regional: {
-      country_code: config.country_code || 'DO',
+      country_code: tenantData.codigo_pais || config.country_code || 'DO',
       currency_default: config.currency_default || 'USD',
-      languages: config.languages || ['es', 'en'],
+      languages: tenantData.idiomas_disponibles || config.languages || ['es', 'en'],
       timezone: config.timezone || 'America/Santo_Domingo',
     },
 
