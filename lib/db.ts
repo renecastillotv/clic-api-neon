@@ -1,5 +1,6 @@
 // api/lib/db.ts
 // Módulo de conexión a Neon PostgreSQL para Vercel Edge Functions
+// Adaptado al schema real de la base de datos
 
 import { neon, neonConfig } from '@neondatabase/serverless';
 
@@ -37,10 +38,8 @@ export async function query<T = any>(
     let result: T[];
 
     if (typeof sqlQuery === 'string') {
-      // Query como string normal
       result = await sql(sqlQuery, params) as T[];
     } else {
-      // Tagged template literal
       result = await sql(sqlQuery, ...params) as T[];
     }
 
@@ -64,18 +63,8 @@ export async function queryOne<T = any>(
   return results[0] || null;
 }
 
-// Helper para ejecutar transacciones (no disponible en serverless, usar con cuidado)
-export async function transaction<T>(
-  callback: (sql: ReturnType<typeof neon>) => Promise<T>
-): Promise<T> {
-  const sql = getSQL();
-  // Nota: Neon serverless no soporta transacciones tradicionales
-  // Esta es una aproximación que ejecuta queries secuencialmente
-  return callback(sql);
-}
-
 // ============================================================================
-// QUERIES COMUNES PREPARADAS
+// QUERIES COMUNES PREPARADAS - Adaptadas al schema real
 // ============================================================================
 
 // Obtener configuración del tenant por dominio
@@ -114,8 +103,8 @@ export async function getDefaultTenant() {
   return result[0] || null;
 }
 
-// Obtener ubicación por slug con jerarquía completa
-export async function getLocationBySlug(slug: string, tenantId: number) {
+// Obtener ubicación por slug (tabla ubicaciones global, sin tenant_id)
+export async function getLocationBySlug(slug: string) {
   const sql = getSQL();
   const result = await sql`
     WITH RECURSIVE location_tree AS (
@@ -123,16 +112,14 @@ export async function getLocationBySlug(slug: string, tenantId: number) {
         u.id,
         u.slug,
         u.nombre as name,
-        u.nombre_en as name_en,
-        u.nombre_fr as name_fr,
         u.tipo,
         u.parent_id,
-        u.coordenadas as coordinates,
+        u.latitud,
+        u.longitud,
         1 as level,
         ARRAY[u.id] as path
       FROM ubicaciones u
       WHERE u.slug = ${slug}
-        AND u.tenant_id = ${tenantId}
         AND u.activo = true
 
       UNION ALL
@@ -141,11 +128,10 @@ export async function getLocationBySlug(slug: string, tenantId: number) {
         u.id,
         u.slug,
         u.nombre as name,
-        u.nombre_en as name_en,
-        u.nombre_fr as name_fr,
         u.tipo,
         u.parent_id,
-        u.coordenadas as coordinates,
+        u.latitud,
+        u.longitud,
         lt.level + 1,
         lt.path || u.id
       FROM ubicaciones u
@@ -158,120 +144,89 @@ export async function getLocationBySlug(slug: string, tenantId: number) {
   return result;
 }
 
-// Obtener propiedades con filtros
+// Obtener propiedades con filtros - Adaptado al schema real
 export async function getProperties(options: {
-  tenantId: number;
+  tenantId: string; // UUID
   filters?: Record<string, any>;
   page?: number;
   limit?: number;
   language?: string;
 }) {
   const sql = getSQL();
-  const { tenantId, filters = {}, page = 1, limit = 32, language = 'es' } = options;
+  const { tenantId, filters = {}, page = 1, limit = 32 } = options;
   const offset = (page - 1) * limit;
 
-  // Construir condiciones dinámicamente
-  const conditions: string[] = ['p.tenant_id = $1', 'p.estado = $2'];
-  const params: any[] = [tenantId, 'disponible'];
-  let paramIndex = 3;
-
-  // Filtro por operación
-  if (filters.operation) {
-    if (filters.operation === 'venta') {
-      conditions.push('p.precio_venta IS NOT NULL');
-    } else if (filters.operation === 'alquiler') {
-      conditions.push('p.precio_alquiler IS NOT NULL');
-    }
-  }
-
-  // Filtro por categoría
-  if (filters.categoryId) {
-    conditions.push(`p.categoria_id = $${paramIndex++}`);
-    params.push(filters.categoryId);
-  }
-
-  // Filtro por ubicación
-  if (filters.locationId) {
-    conditions.push(`(p.sector_id = $${paramIndex} OR p.ciudad_id = $${paramIndex} OR p.provincia_id = $${paramIndex})`);
-    params.push(filters.locationId);
-    paramIndex++;
-  }
-
-  // Filtro por precio
-  if (filters.minPrice) {
-    conditions.push(`COALESCE(p.precio_venta, p.precio_alquiler) >= $${paramIndex++}`);
-    params.push(filters.minPrice);
-  }
-  if (filters.maxPrice) {
-    conditions.push(`COALESCE(p.precio_venta, p.precio_alquiler) <= $${paramIndex++}`);
-    params.push(filters.maxPrice);
-  }
-
-  // Filtro por habitaciones
-  if (filters.bedrooms) {
-    conditions.push(`p.habitaciones >= $${paramIndex++}`);
-    params.push(filters.bedrooms);
-  }
-
-  // Filtro por baños
-  if (filters.bathrooms) {
-    conditions.push(`p.banos >= $${paramIndex++}`);
-    params.push(filters.bathrooms);
-  }
-
-  const whereClause = conditions.join(' AND ');
-
-  // Query principal
-  const propertiesQuery = `
+  // Query base - el schema usa campos directos, no JOINs con ubicaciones
+  const properties = await sql`
     SELECT
       p.id,
       p.slug,
       p.codigo,
       p.titulo,
-      p.traducciones,
+      p.descripcion,
+      p.short_description,
+      p.tipo,
+      p.operacion,
+      p.precio,
       p.precio_venta,
-      p.moneda_venta,
       p.precio_alquiler,
-      p.moneda_alquiler,
+      p.moneda,
+      p.pais,
+      p.provincia,
+      p.ciudad,
+      p.sector,
+      p.direccion,
+      p.latitud,
+      p.longitud,
       p.habitaciones,
       p.banos,
       p.medios_banos,
-      p.parqueos,
-      p.area_construida,
-      p.area_total,
+      p.estacionamientos,
+      p.m2_construccion,
+      p.m2_terreno,
       p.imagen_principal,
-      p.galeria_imagenes,
+      p.imagenes,
+      p.amenidades,
       p.destacada,
-      p.es_proyecto,
+      p.exclusiva,
+      p.estado_propiedad,
+      p.is_project,
+      p.is_furnished,
       p.created_at,
-      cp.nombre as categoria_nombre,
-      cp.slug as categoria_slug,
-      s.nombre as sector_nombre,
-      s.slug as sector_slug,
-      c.nombre as ciudad_nombre,
-      c.slug as ciudad_slug
+      p.updated_at,
+      p.agente_id
     FROM propiedades p
-    LEFT JOIN categorias_propiedades cp ON p.categoria_id = cp.id
-    LEFT JOIN ubicaciones s ON p.sector_id = s.id
-    LEFT JOIN ubicaciones c ON p.ciudad_id = c.id
-    WHERE ${whereClause}
+    WHERE p.tenant_id = ${tenantId}
+      AND p.activo = true
+      AND p.estado_propiedad = 'disponible'
+      ${filters.operacion ? sql`AND p.operacion = ${filters.operacion}` : sql``}
+      ${filters.tipo ? sql`AND p.tipo = ${filters.tipo}` : sql``}
+      ${filters.ciudad ? sql`AND LOWER(p.ciudad) = LOWER(${filters.ciudad})` : sql``}
+      ${filters.sector ? sql`AND LOWER(p.sector) = LOWER(${filters.sector})` : sql``}
+      ${filters.minPrice ? sql`AND COALESCE(p.precio_venta, p.precio_alquiler, p.precio) >= ${filters.minPrice}` : sql``}
+      ${filters.maxPrice ? sql`AND COALESCE(p.precio_venta, p.precio_alquiler, p.precio) <= ${filters.maxPrice}` : sql``}
+      ${filters.habitaciones ? sql`AND p.habitaciones >= ${filters.habitaciones}` : sql``}
+      ${filters.banos ? sql`AND p.banos >= ${filters.banos}` : sql``}
     ORDER BY p.destacada DESC, p.created_at DESC
-    LIMIT $${paramIndex++} OFFSET $${paramIndex}
+    LIMIT ${limit} OFFSET ${offset}
   `;
-
-  params.push(limit, offset);
 
   // Query de conteo
-  const countQuery = `
+  const countResult = await sql`
     SELECT COUNT(*) as total
     FROM propiedades p
-    WHERE ${whereClause}
+    WHERE p.tenant_id = ${tenantId}
+      AND p.activo = true
+      AND p.estado_propiedad = 'disponible'
+      ${filters.operacion ? sql`AND p.operacion = ${filters.operacion}` : sql``}
+      ${filters.tipo ? sql`AND p.tipo = ${filters.tipo}` : sql``}
+      ${filters.ciudad ? sql`AND LOWER(p.ciudad) = LOWER(${filters.ciudad})` : sql``}
+      ${filters.sector ? sql`AND LOWER(p.sector) = LOWER(${filters.sector})` : sql``}
+      ${filters.minPrice ? sql`AND COALESCE(p.precio_venta, p.precio_alquiler, p.precio) >= ${filters.minPrice}` : sql``}
+      ${filters.maxPrice ? sql`AND COALESCE(p.precio_venta, p.precio_alquiler, p.precio) <= ${filters.maxPrice}` : sql``}
+      ${filters.habitaciones ? sql`AND p.habitaciones >= ${filters.habitaciones}` : sql``}
+      ${filters.banos ? sql`AND p.banos >= ${filters.banos}` : sql``}
   `;
-
-  const [properties, countResult] = await Promise.all([
-    sql(propertiesQuery, params),
-    sql(countQuery, params.slice(0, -2)) // Sin limit y offset
-  ]);
 
   const total = parseInt(countResult[0]?.total || '0', 10);
 
@@ -289,220 +244,279 @@ export async function getProperties(options: {
 }
 
 // Obtener propiedad individual por slug
-export async function getPropertyBySlug(slug: string, tenantId: number) {
+export async function getPropertyBySlug(slug: string, tenantId: string) {
   const sql = getSQL();
   const result = await sql`
     SELECT
       p.*,
-      cp.nombre as categoria_nombre,
-      cp.slug as categoria_slug,
-      cp.nombre_en as categoria_nombre_en,
-      cp.nombre_fr as categoria_nombre_fr,
-      s.nombre as sector_nombre,
-      s.slug as sector_slug,
-      s.coordenadas as sector_coordenadas,
-      c.nombre as ciudad_nombre,
-      c.slug as ciudad_slug,
-      c.coordenadas as ciudad_coordenadas,
-      pr.nombre as provincia_nombre,
-      pr.slug as provincia_slug,
-      proj.id as proyecto_id,
-      proj.nombre as proyecto_nombre,
-      proj.slug as proyecto_slug,
-      proj.imagen_principal as proyecto_imagen
+      u.nombre as agente_nombre,
+      u.apellido as agente_apellido,
+      u.email as agente_email,
+      u.telefono as agente_telefono,
+      u.avatar as agente_avatar,
+      u.slug as agente_slug
     FROM propiedades p
-    LEFT JOIN categorias_propiedades cp ON p.categoria_id = cp.id
-    LEFT JOIN ubicaciones s ON p.sector_id = s.id
-    LEFT JOIN ubicaciones c ON p.ciudad_id = c.id
-    LEFT JOIN ubicaciones pr ON c.parent_id = pr.id
-    LEFT JOIN proyectos proj ON p.proyecto_id = proj.id
+    LEFT JOIN usuarios u ON p.agente_id = u.id
     WHERE p.slug = ${slug}
       AND p.tenant_id = ${tenantId}
-      AND p.estado IN ('disponible', 'reservado')
+      AND p.estado_propiedad IN ('disponible', 'reservado')
     LIMIT 1
   `;
   return result[0] || null;
 }
 
-// Obtener amenidades de una propiedad
-export async function getPropertyAmenities(propertyId: number) {
-  const sql = getSQL();
-  return sql`
-    SELECT
-      a.id,
-      a.nombre as name,
-      a.nombre_en as name_en,
-      a.nombre_fr as name_fr,
-      a.icono as icon,
-      a.categoria as category
-    FROM propiedad_amenidades pa
-    JOIN amenidades a ON pa.amenidad_id = a.id
-    WHERE pa.propiedad_id = ${propertyId}
-    ORDER BY a.categoria, a.nombre
-  `;
-}
-
-// Obtener agentes de una propiedad
-export async function getPropertyAgents(propertyId: number) {
-  const sql = getSQL();
-  return sql`
-    SELECT
-      pa.es_principal as is_main,
-      u.id,
-      u.slug,
-      CONCAT(u.nombre, ' ', u.apellido) as full_name,
-      u.nombre as first_name,
-      u.apellido as last_name,
-      u.avatar as photo_url,
-      u.telefono as phone,
-      u.whatsapp,
-      u.email
-    FROM propiedad_asesores pa
-    JOIN usuarios u ON pa.asesor_id = u.id
-    WHERE pa.propiedad_id = ${propertyId}
-      AND u.activo = true
-    ORDER BY pa.es_principal DESC
-  `;
-}
-
-// Obtener asesor por slug
-export async function getAdvisorBySlug(slug: string, tenantId: number) {
+// Obtener agente/usuario por slug
+export async function getAdvisorBySlug(slug: string, tenantId: string) {
   const sql = getSQL();
   const result = await sql`
     SELECT
       u.*,
-      pa.bio,
-      pa.especialidades as specialties,
-      pa.idiomas as languages,
-      pa.certificaciones as certifications,
-      pa.redes_sociales as social,
-      pa.estadisticas as stats
+      ut.es_owner,
+      (
+        SELECT COUNT(*)
+        FROM propiedades p
+        WHERE p.agente_id = u.id
+          AND p.activo = true
+          AND p.estado_propiedad = 'disponible'
+      ) as propiedades_count
     FROM usuarios u
-    LEFT JOIN perfiles_asesor pa ON u.id = pa.usuario_id
+    JOIN usuarios_tenants ut ON u.id = ut.usuario_id AND ut.tenant_id = ${tenantId}
     WHERE u.slug = ${slug}
-      AND u.tenant_id = ${tenantId}
       AND u.activo = true
-      AND u.rol IN ('asesor', 'admin', 'gerente')
     LIMIT 1
   `;
   return result[0] || null;
 }
 
-// Obtener contenido (artículos, videos, testimonios)
-export async function getContent(options: {
-  tenantId: number;
-  type: 'articulos' | 'videos' | 'testimonios';
-  slug?: string;
-  categorySlug?: string;
-  page?: number;
-  limit?: number;
-  language?: string;
-}) {
+// Obtener lista de asesores del tenant
+export async function getAdvisors(tenantId: string, limit: number = 50) {
   const sql = getSQL();
-  const { tenantId, type, slug, categorySlug, page = 1, limit = 12, language = 'es' } = options;
-  const offset = (page - 1) * limit;
-
-  const table = type;
-
-  if (slug) {
-    // Obtener item individual
-    const result = await sql`
-      SELECT *
-      FROM ${sql(table)}
-      WHERE slug = ${slug}
-        AND tenant_id = ${tenantId}
-        AND estado = 'publicado'
-      LIMIT 1
-    `;
-    return { item: result[0] || null };
-  }
-
-  // Obtener lista
-  let categoryCondition = '';
-  const params: any[] = [tenantId, 'publicado', limit, offset];
-
-  if (categorySlug) {
-    categoryCondition = 'AND categoria_slug = $5';
-    params.push(categorySlug);
-  }
-
-  const items = await sql`
-    SELECT *
-    FROM ${sql(table)}
-    WHERE tenant_id = ${tenantId}
-      AND estado = 'publicado'
-      ${categorySlug ? sql`AND categoria_slug = ${categorySlug}` : sql``}
-    ORDER BY fecha_publicacion DESC, created_at DESC
-    LIMIT ${limit} OFFSET ${offset}
+  return sql`
+    SELECT
+      u.id,
+      u.slug,
+      u.nombre,
+      u.apellido,
+      u.email,
+      u.telefono,
+      u.avatar,
+      u.bio,
+      ut.es_owner,
+      (
+        SELECT COUNT(*)
+        FROM propiedades p
+        WHERE p.agente_id = u.id
+          AND p.activo = true
+          AND p.estado_propiedad = 'disponible'
+      ) as propiedades_count
+    FROM usuarios u
+    JOIN usuarios_tenants ut ON u.id = ut.usuario_id AND ut.tenant_id = ${tenantId}
+    WHERE u.activo = true
+      AND ut.activo = true
+    ORDER BY ut.es_owner DESC, u.nombre ASC
+    LIMIT ${limit}
   `;
-
-  const countResult = await sql`
-    SELECT COUNT(*) as total
-    FROM ${sql(table)}
-    WHERE tenant_id = ${tenantId}
-      AND estado = 'publicado'
-      ${categorySlug ? sql`AND categoria_slug = ${categorySlug}` : sql``}
-  `;
-
-  const total = parseInt(countResult[0]?.total || '0', 10);
-
-  return {
-    items,
-    pagination: {
-      page,
-      limit,
-      total_items: total,
-      total_pages: Math.ceil(total / limit),
-      has_next: page * limit < total,
-      has_prev: page > 1
-    }
-  };
 }
 
-// Obtener FAQs
+// Obtener testimonios (usando mock_testimonios que tiene tenant_id)
+export async function getTestimonials(tenantId: string, limit: number = 10) {
+  const sql = getSQL();
+  return sql`
+    SELECT
+      t.id,
+      t.nombre_cliente as client_name,
+      t.ubicacion as client_location,
+      t.testimonio as content,
+      t.calificacion as rating,
+      t.foto_url as client_photo,
+      t.tipo_propiedad as property_type,
+      t.destacado as is_featured,
+      t.fecha as created_at
+    FROM mock_testimonios t
+    WHERE t.tenant_id = ${tenantId}
+      AND t.activo = true
+    ORDER BY t.destacado DESC, t.fecha DESC
+    LIMIT ${limit}
+  `;
+}
+
+// Obtener FAQs (usando mock_faqs que tiene tenant_id)
 export async function getFAQs(options: {
-  tenantId: number;
-  context?: 'general' | 'property' | 'advisor' | 'location';
-  contextId?: number;
+  tenantId: string;
   limit?: number;
 }) {
   const sql = getSQL();
-  const { tenantId, context, contextId, limit = 10 } = options;
+  const { tenantId, limit = 10 } = options;
 
   return sql`
     SELECT
       id,
       pregunta as question,
-      pregunta_en as question_en,
-      pregunta_fr as question_fr,
       respuesta as answer,
-      respuesta_en as answer_en,
-      respuesta_fr as answer_fr,
       categoria as category,
-      orden as order
-    FROM faqs
+      orden as "order",
+      traducciones as translations
+    FROM mock_faqs
     WHERE tenant_id = ${tenantId}
       AND activo = true
-      ${context ? sql`AND contexto = ${context}` : sql``}
-      ${contextId ? sql`AND contexto_id = ${contextId}` : sql``}
     ORDER BY orden ASC
     LIMIT ${limit}
   `;
+}
+
+// Obtener categorías de propiedades
+export async function getPropertyCategories(tenantId: string) {
+  const sql = getSQL();
+  return sql`
+    SELECT
+      id,
+      slug,
+      nombre as name,
+      icono as icon,
+      descripcion as description,
+      traducciones as translations
+    FROM categorias_propiedades
+    WHERE (tenant_id = ${tenantId} OR tenant_id IS NULL)
+      AND activo = true
+    ORDER BY orden ASC, nombre ASC
+  `;
+}
+
+// Obtener ubicaciones globales (sin filtro por tenant)
+export async function getLocations(tipo?: string) {
+  const sql = getSQL();
+  return sql`
+    SELECT
+      id,
+      slug,
+      nombre as name,
+      tipo,
+      nivel as level,
+      parent_id,
+      latitud,
+      longitud,
+      destacado as is_featured,
+      traducciones as translations
+    FROM ubicaciones
+    WHERE activo = true
+      ${tipo ? sql`AND tipo = ${tipo}` : sql``}
+    ORDER BY destacado DESC, orden ASC, nombre ASC
+  `;
+}
+
+// Obtener estadísticas rápidas del tenant
+export async function getQuickStats(tenantId: string) {
+  const sql = getSQL();
+  const result = await sql`
+    SELECT
+      COUNT(*) FILTER (WHERE estado_propiedad = 'disponible') as total_properties,
+      COUNT(*) FILTER (WHERE estado_propiedad = 'disponible' AND operacion = 'venta') as for_sale,
+      COUNT(*) FILTER (WHERE estado_propiedad = 'disponible' AND operacion = 'alquiler') as for_rent,
+      COUNT(*) FILTER (WHERE estado_propiedad = 'disponible' AND created_at > NOW() - INTERVAL '30 days') as new_this_month
+    FROM propiedades
+    WHERE tenant_id = ${tenantId}
+      AND activo = true
+  `;
+
+  const s = result[0] || {};
+  return {
+    total_properties: parseInt(s.total_properties || '0', 10),
+    for_sale: parseInt(s.for_sale || '0', 10),
+    for_rent: parseInt(s.for_rent || '0', 10),
+    new_this_month: parseInt(s.new_this_month || '0', 10)
+  };
+}
+
+// Obtener propiedades destacadas
+export async function getFeaturedProperties(tenantId: string, limit: number = 12) {
+  const sql = getSQL();
+  return sql`
+    SELECT
+      p.id,
+      p.slug,
+      p.titulo,
+      p.tipo,
+      p.operacion,
+      p.precio,
+      p.precio_venta,
+      p.precio_alquiler,
+      p.moneda,
+      p.ciudad,
+      p.sector,
+      p.habitaciones,
+      p.banos,
+      p.m2_construccion,
+      p.imagen_principal,
+      p.destacada,
+      p.created_at
+    FROM propiedades p
+    WHERE p.tenant_id = ${tenantId}
+      AND p.activo = true
+      AND p.estado_propiedad = 'disponible'
+      AND p.destacada = true
+    ORDER BY p.created_at DESC
+    LIMIT ${limit}
+  `;
+}
+
+// Obtener ciudades/sectores populares
+export async function getPopularLocations(tenantId: string) {
+  const sql = getSQL();
+
+  const cities = await sql`
+    SELECT
+      ciudad as name,
+      LOWER(REPLACE(ciudad, ' ', '-')) as slug,
+      COUNT(*) as count
+    FROM propiedades
+    WHERE tenant_id = ${tenantId}
+      AND activo = true
+      AND estado_propiedad = 'disponible'
+      AND ciudad IS NOT NULL
+      AND ciudad != ''
+    GROUP BY ciudad
+    HAVING COUNT(*) >= 1
+    ORDER BY count DESC
+    LIMIT 8
+  `;
+
+  const sectors = await sql`
+    SELECT
+      sector as name,
+      LOWER(REPLACE(sector, ' ', '-')) as slug,
+      ciudad as city,
+      COUNT(*) as count
+    FROM propiedades
+    WHERE tenant_id = ${tenantId}
+      AND activo = true
+      AND estado_propiedad = 'disponible'
+      AND sector IS NOT NULL
+      AND sector != ''
+    GROUP BY sector, ciudad
+    HAVING COUNT(*) >= 1
+    ORDER BY count DESC
+    LIMIT 8
+  `;
+
+  return { cities, sectors };
 }
 
 export default {
   getSQL,
   query,
   queryOne,
-  transaction,
   getTenantByDomain,
   getDefaultTenant,
   getLocationBySlug,
   getProperties,
   getPropertyBySlug,
-  getPropertyAmenities,
-  getPropertyAgents,
   getAdvisorBySlug,
-  getContent,
-  getFAQs
+  getAdvisors,
+  getTestimonials,
+  getFAQs,
+  getPropertyCategories,
+  getLocations,
+  getQuickStats,
+  getFeaturedProperties,
+  getPopularLocations
 };

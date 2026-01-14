@@ -4,10 +4,11 @@
   "description": "API para CRM Inmobiliario - Vercel Edge Functions con Neon PostgreSQL",
   "type": "module",
   "scripts": {
-    "dev": "vercel dev"
+    "test": "node --experimental-strip-types test.ts"
   },
   "dependencies": {
-    "@neondatabase/serverless": "^0.10.0"
+    "@neondatabase/serverless": "^0.10.0",
+    "dotenv": "^17.2.3"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
