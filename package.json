@@ -1,0 +1,23 @@
+{
+  "name": "clic-api-neon",
+  "version": "1.0.0",
+  "description": "API para CRM Inmobiliario - Vercel Edge Functions con Neon PostgreSQL",
+  "type": "module",
+  "scripts": {
+    "dev": "vercel dev",
+    "build": "vercel build",
+    "deploy": "vercel deploy",
+    "deploy:prod": "vercel deploy --prod"
+  },
+  "dependencies": {
+    "@neondatabase/serverless": "^0.10.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0",
+    "vercel": "^39.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
