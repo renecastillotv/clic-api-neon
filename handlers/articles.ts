@@ -248,176 +248,189 @@ async function handleArticlesMain(options: {
   const sql = db.getSQL();
   const offset = (page - 1) * limit;
 
-  // Query: Artículos destacados
-  const featuredResult = await sql`
-    SELECT
-      a.id,
-      a.slug,
-      a.titulo,
-      a.extracto,
-      a.imagen_principal,
-      a.fecha_publicacion,
-      a.vistas,
-      a.tiempo_lectura,
-      a.destacado,
-      a.traducciones,
-      a.categoria_id,
-      cc.slug as categoria_slug,
-      cc.nombre as categoria_nombre,
-      cc.traducciones as categoria_traducciones,
-      u.id as autor_id,
-      u.nombre as autor_nombre,
-      u.apellido as autor_apellido,
-      u.avatar_url as autor_foto,
-      u.slug as autor_slug,
-      pa.titulo_profesional as autor_cargo
-    FROM articulos a
-    LEFT JOIN categorias_contenido cc ON a.categoria_id = cc.id
-    LEFT JOIN usuarios u ON a.autor_id = u.id
-    LEFT JOIN perfiles_asesor pa ON pa.usuario_id = u.id AND pa.tenant_id = ${tenant.id}
-    WHERE a.tenant_id = ${tenant.id}
-      AND a.publicado = true
-      AND a.destacado = true
-    ORDER BY a.fecha_publicacion DESC
-    LIMIT 6
-  `;
+  try {
+    // Query: Artículos destacados
+    const featuredResult = await sql`
+      SELECT
+        a.id,
+        a.slug,
+        a.titulo,
+        a.extracto,
+        a.imagen_principal,
+        a.fecha_publicacion,
+        a.vistas,
+        a.destacado,
+        a.traducciones,
+        a.categoria_id,
+        a.autor_nombre,
+        a.autor_foto,
+        cc.slug as categoria_slug,
+        cc.nombre as categoria_nombre,
+        cc.traducciones as categoria_traducciones
+      FROM articulos a
+      LEFT JOIN categorias_contenido cc ON a.categoria_id = cc.id
+      WHERE a.tenant_id = ${tenant.id}
+        AND a.publicado = true
+        AND a.destacado = true
+      ORDER BY a.fecha_publicacion DESC NULLS LAST
+      LIMIT 6
+    `;
 
-  // Query: Artículos recientes (paginados)
-  const recentResult = await sql`
-    SELECT
-      a.id,
-      a.slug,
-      a.titulo,
-      a.extracto,
-      a.imagen_principal,
-      a.fecha_publicacion,
-      a.vistas,
-      a.tiempo_lectura,
-      a.destacado,
-      a.traducciones,
-      a.categoria_id,
-      cc.slug as categoria_slug,
-      cc.nombre as categoria_nombre,
-      cc.traducciones as categoria_traducciones,
-      u.id as autor_id,
-      u.nombre as autor_nombre,
-      u.apellido as autor_apellido,
-      u.avatar_url as autor_foto,
-      u.slug as autor_slug,
-      pa.titulo_profesional as autor_cargo
-    FROM articulos a
-    LEFT JOIN categorias_contenido cc ON a.categoria_id = cc.id
-    LEFT JOIN usuarios u ON a.autor_id = u.id
-    LEFT JOIN perfiles_asesor pa ON pa.usuario_id = u.id AND pa.tenant_id = ${tenant.id}
-    WHERE a.tenant_id = ${tenant.id}
-      AND a.publicado = true
-    ORDER BY a.destacado DESC, a.fecha_publicacion DESC
-    LIMIT ${limit} OFFSET ${offset}
-  `;
+    // Query: Artículos recientes (paginados)
+    const recentResult = await sql`
+      SELECT
+        a.id,
+        a.slug,
+        a.titulo,
+        a.extracto,
+        a.imagen_principal,
+        a.fecha_publicacion,
+        a.vistas,
+        a.destacado,
+        a.traducciones,
+        a.categoria_id,
+        a.autor_nombre,
+        a.autor_foto,
+        cc.slug as categoria_slug,
+        cc.nombre as categoria_nombre,
+        cc.traducciones as categoria_traducciones
+      FROM articulos a
+      LEFT JOIN categorias_contenido cc ON a.categoria_id = cc.id
+      WHERE a.tenant_id = ${tenant.id}
+        AND a.publicado = true
+      ORDER BY a.destacado DESC, a.fecha_publicacion DESC NULLS LAST
+      LIMIT ${limit} OFFSET ${offset}
+    `;
 
-  // Query: Categorías con conteo
-  const categoriesResult = await sql`
-    SELECT
-      cc.id,
-      cc.slug,
-      cc.nombre as name,
-      cc.descripcion as description,
-      cc.traducciones,
-      COUNT(a.id) as article_count
-    FROM categorias_contenido cc
-    LEFT JOIN articulos a ON a.categoria_id = cc.id
-      AND a.publicado = true
-      AND a.tenant_id = ${tenant.id}
-    WHERE cc.tenant_id = ${tenant.id}
-      AND cc.tipo = 'articulo'
-      AND cc.activa = true
-    GROUP BY cc.id, cc.slug, cc.nombre, cc.descripcion, cc.traducciones
-    HAVING COUNT(a.id) > 0
-    ORDER BY cc.orden ASC, cc.nombre ASC
-  `;
+    // Query: Categorías con conteo (simplificado)
+    const categoriesResult = await sql`
+      SELECT
+        cc.id,
+        cc.slug,
+        cc.nombre as name,
+        cc.descripcion as description,
+        cc.traducciones,
+        (SELECT COUNT(*) FROM articulos a WHERE a.categoria_id = cc.id AND a.publicado = true AND a.tenant_id = ${tenant.id}) as article_count
+      FROM categorias_contenido cc
+      WHERE cc.tenant_id = ${tenant.id}
+        AND cc.tipo = 'articulo'
+        AND cc.activa = true
+      ORDER BY cc.orden ASC, cc.nombre ASC
+    `;
 
-  // Query: Estadísticas
-  const statsResult = await sql`
-    SELECT
-      COUNT(*) as total_articles,
-      COALESCE(SUM(vistas), 0) as total_views,
-      AVG(COALESCE(tiempo_lectura, 5)) as avg_read_time,
-      COUNT(CASE WHEN destacado = true THEN 1 END) as featured_count,
-      COUNT(CASE WHEN fecha_publicacion >= DATE_TRUNC('month', CURRENT_DATE) THEN 1 END) as published_this_month
-    FROM articulos
-    WHERE tenant_id = ${tenant.id}
-      AND publicado = true
-  `;
+    // Query: Estadísticas
+    const statsResult = await sql`
+      SELECT
+        COUNT(*) as total_articles,
+        COALESCE(SUM(vistas), 0) as total_views,
+        COUNT(CASE WHEN destacado = true THEN 1 END) as featured_count,
+        COUNT(CASE WHEN fecha_publicacion >= DATE_TRUNC('month', CURRENT_DATE) THEN 1 END) as published_this_month
+      FROM articulos
+      WHERE tenant_id = ${tenant.id}
+        AND publicado = true
+    `;
 
-  // Query: Total para paginación
-  const countResult = await sql`
-    SELECT COUNT(*) as total
-    FROM articulos
-    WHERE tenant_id = ${tenant.id}
-      AND publicado = true
-  `;
+    // Query: Total para paginación
+    const countResult = await sql`
+      SELECT COUNT(*) as total
+      FROM articulos
+      WHERE tenant_id = ${tenant.id}
+        AND publicado = true
+    `;
 
-  // Procesar artículos destacados
-  const featuredArticles = (featuredResult as any[]).map((item: any) =>
-    processArticle(item, language, trackingString)
-  );
+    // Procesar artículos destacados
+    const featuredArticles = (featuredResult as any[]).map((item: any) =>
+      processArticle(item, language, trackingString)
+    );
 
-  // Procesar artículos recientes
-  const recentArticles = (recentResult as any[]).map((item: any) =>
-    processArticle(item, language, trackingString)
-  );
+    // Procesar artículos recientes
+    const recentArticles = (recentResult as any[]).map((item: any) =>
+      processArticle(item, language, trackingString)
+    );
 
-  // Procesar categorías
-  const categories: ArticleCategory[] = (categoriesResult as any[]).map((cat: any) => {
-    const catProcessed = utils.processTranslations(cat, language);
-    return {
-      id: cat.id,
-      name: utils.getTranslatedField(catProcessed, 'name', language) || cat.name,
-      slug: cat.slug,
-      description: utils.getTranslatedField(catProcessed, 'description', language) || cat.description,
-      articleCount: parseInt(cat.article_count, 10),
+    // Procesar categorías
+    const categories: ArticleCategory[] = (categoriesResult as any[])
+      .filter((cat: any) => parseInt(cat.article_count || '0', 10) > 0)
+      .map((cat: any) => {
+        const catProcessed = utils.processTranslations(cat, language);
+        return {
+          id: cat.id,
+          name: utils.getTranslatedField(catProcessed, 'name', language) || cat.name,
+          slug: cat.slug,
+          description: utils.getTranslatedField(catProcessed, 'description', language) || cat.description,
+          articleCount: parseInt(cat.article_count || '0', 10),
+        };
+      });
+
+    // Procesar estadísticas
+    const statsData = (statsResult as any[])[0] || {};
+    const totalArticles = parseInt((countResult as any[])[0]?.total || '0', 10);
+
+    const stats = {
+      totalArticles,
+      totalCategories: categories.length,
+      totalViews: parseInt(statsData.total_views || '0', 10),
+      averageReadTime: 5, // Default, ya que no hay campo tiempo_lectura
+      publishedThisMonth: parseInt(statsData.published_this_month || '0', 10),
+      featuredCount: parseInt(statsData.featured_count || '0', 10),
     };
-  });
 
-  // Procesar estadísticas
-  const statsData = (statsResult as any[])[0] || {};
-  const totalArticles = parseInt((countResult as any[])[0]?.total || '0', 10);
+    // Construir SEO
+    const seo = generateArticlesMainSEO(language, tenant, stats.totalArticles);
 
-  const stats = {
-    totalArticles,
-    totalCategories: categories.length,
-    totalViews: parseInt(statsData.total_views || '0', 10),
-    averageReadTime: Math.round(parseFloat(statsData.avg_read_time || '5')),
-    publishedThisMonth: parseInt(statsData.published_this_month || '0', 10),
-    featuredCount: parseInt(statsData.featured_count || '0', 10),
-  };
+    // Paginación
+    const totalPages = Math.ceil(totalArticles / limit) || 1;
+    const pagination = {
+      page,
+      limit,
+      total: totalArticles,
+      totalPages,
+      hasNext: page < totalPages,
+      hasPrev: page > 1,
+    };
 
-  // Construir SEO
-  const seo = generateArticlesMainSEO(language, tenant, stats.totalArticles);
-
-  // Paginación
-  const totalPages = Math.ceil(totalArticles / limit);
-  const pagination = {
-    page,
-    limit,
-    total: totalArticles,
-    totalPages,
-    hasNext: page < totalPages,
-    hasPrev: page > 1,
-  };
-
-  return {
-    type: 'articles-main',
-    language,
-    tenant,
-    seo,
-    trackingString,
-    featuredArticles,
-    recentArticles,
-    categories,
-    stats,
-    pagination,
-  };
+    return {
+      type: 'articles-main',
+      language,
+      tenant,
+      seo,
+      trackingString,
+      featuredArticles,
+      recentArticles,
+      categories,
+      stats,
+      pagination,
+    };
+  } catch (error) {
+    console.error('[Articles Main Handler] Error:', error);
+    // Retornar respuesta vacía en caso de error
+    return {
+      type: 'articles-main',
+      language,
+      tenant,
+      seo: generateArticlesMainSEO(language, tenant, 0),
+      trackingString,
+      featuredArticles: [],
+      recentArticles: [],
+      categories: [],
+      stats: {
+        totalArticles: 0,
+        totalCategories: 0,
+        totalViews: 0,
+        averageReadTime: 5,
+        publishedThisMonth: 0,
+        featuredCount: 0,
+      },
+      pagination: {
+        page: 1,
+        limit,
+        total: 0,
+        totalPages: 1,
+        hasNext: false,
+        hasPrev: false,
+      },
+    };
+  }
 }
 
 // ============================================================================
@@ -476,25 +489,18 @@ async function handleArticlesCategory(options: {
       a.imagen_principal,
       a.fecha_publicacion,
       a.vistas,
-      a.tiempo_lectura,
       a.destacado,
       a.traducciones,
       a.categoria_id,
+      a.autor_nombre,
+      a.autor_foto,
       ${categoryData.slug} as categoria_slug,
-      ${categoryData.name} as categoria_nombre,
-      u.id as autor_id,
-      u.nombre as autor_nombre,
-      u.apellido as autor_apellido,
-      u.avatar_url as autor_foto,
-      u.slug as autor_slug,
-      pa.titulo_profesional as autor_cargo
+      ${categoryData.name} as categoria_nombre
     FROM articulos a
-    LEFT JOIN usuarios u ON a.autor_id = u.id
-    LEFT JOIN perfiles_asesor pa ON pa.usuario_id = u.id AND pa.tenant_id = ${tenant.id}
     WHERE a.tenant_id = ${tenant.id}
       AND a.categoria_id = ${categoryData.id}
       AND a.publicado = true
-    ORDER BY a.destacado DESC, a.fecha_publicacion DESC
+    ORDER BY a.destacado DESC, a.fecha_publicacion DESC NULLS LAST
     LIMIT ${limit} OFFSET ${offset}
   `;
 
@@ -560,24 +566,29 @@ async function handleSingleArticle(options: {
   // Query: Artículo individual con toda la información
   const articleResult = await sql`
     SELECT
-      a.*,
+      a.id,
+      a.slug,
+      a.titulo,
+      a.extracto,
+      a.contenido,
+      a.imagen_principal,
+      a.imagenes,
+      a.fecha_publicacion,
+      a.vistas,
+      a.destacado,
+      a.traducciones,
+      a.categoria_id,
+      a.autor_nombre,
+      a.autor_foto,
+      a.meta_titulo,
+      a.meta_descripcion,
+      a.tags,
       cc.slug as categoria_slug,
       cc.nombre as categoria_nombre,
       cc.descripcion as categoria_descripcion,
-      cc.traducciones as categoria_traducciones,
-      u.id as autor_id,
-      u.nombre as autor_nombre,
-      u.apellido as autor_apellido,
-      u.avatar_url as autor_foto,
-      u.slug as autor_slug,
-      u.email as autor_email,
-      u.telefono as autor_telefono,
-      pa.titulo_profesional as autor_cargo,
-      pa.biografia as autor_bio
+      cc.traducciones as categoria_traducciones
     FROM articulos a
     LEFT JOIN categorias_contenido cc ON a.categoria_id = cc.id
-    LEFT JOIN usuarios u ON a.autor_id = u.id
-    LEFT JOIN perfiles_asesor pa ON pa.usuario_id = u.id AND pa.tenant_id = ${tenant.id}
     WHERE a.tenant_id = ${tenant.id}
       AND a.slug = ${articleSlug}
       AND a.publicado = true
@@ -615,27 +626,21 @@ async function handleSingleArticle(options: {
       a.imagen_principal,
       a.fecha_publicacion,
       a.vistas,
-      a.tiempo_lectura,
       a.destacado,
       a.traducciones,
       a.categoria_id,
+      a.autor_nombre,
+      a.autor_foto,
       cc.slug as categoria_slug,
-      cc.nombre as categoria_nombre,
-      u.id as autor_id,
-      u.nombre as autor_nombre,
-      u.apellido as autor_apellido,
-      u.avatar_url as autor_foto,
-      u.slug as autor_slug
+      cc.nombre as categoria_nombre
     FROM articulos a
     LEFT JOIN categorias_contenido cc ON a.categoria_id = cc.id
-    LEFT JOIN usuarios u ON a.autor_id = u.id
     WHERE a.tenant_id = ${tenant.id}
       AND a.publicado = true
       AND a.id != ${articleData.id}
-      AND (a.categoria_id = ${articleData.categoria_id} OR a.categoria_id IS NULL)
     ORDER BY
       CASE WHEN a.categoria_id = ${articleData.categoria_id} THEN 0 ELSE 1 END,
-      a.fecha_publicacion DESC
+      a.fecha_publicacion DESC NULLS LAST
     LIMIT 4
   `;
 
