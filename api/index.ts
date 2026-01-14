@@ -2,16 +2,16 @@
 // Router principal para Vercel Edge Functions
 // Este archivo maneja todas las rutas y delega a los handlers específicos
 
-import db from './lib/db';
-import utils from './lib/utils';
+import db from '../lib/db';
+import utils from '../lib/utils';
 
 // Handlers
-import propertiesHandler from './handlers/properties';
-import contentHandler from './handlers/content';
-import advisorsHandler from './handlers/advisors';
-import homepageHandler from './handlers/homepage';
+import propertiesHandler from '../handlers/properties';
+import contentHandler from '../handlers/content';
+import advisorsHandler from '../handlers/advisors';
+import homepageHandler from '../handlers/homepage';
 
-import type { TenantConfig, ApiResponse, Error404Response } from './types';
+import type { TenantConfig, ApiResponse, Error404Response } from '../types';
 
 // Configuración para Edge Runtime
 export const config = {

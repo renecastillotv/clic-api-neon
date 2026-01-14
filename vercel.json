@@ -3,17 +3,10 @@
   "version": 2,
   "name": "clic-api-neon",
   "regions": ["iad1"],
-  "functions": {
-    "index.ts": {
-      "runtime": "edge",
-      "memory": 128,
-      "maxDuration": 10
-    }
-  },
-  "routes": [
+  "rewrites": [
     {
-      "src": "/(.*)",
-      "dest": "/index.ts"
+      "source": "/(.*)",
+      "destination": "/api"
     }
   ]
 }
