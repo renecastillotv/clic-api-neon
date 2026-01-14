@@ -403,13 +403,13 @@ function generateAdvisorsListSEO(
 }
 
 function generateSingleAdvisorSEO(
-  advisor: Advisor,
+  advisor: any,
   language: string,
   tenant: TenantConfig,
   propertiesCount: number
 ): SEOData {
   const bioText = utils.getLocalizedText(advisor.bio, language);
-  const specialtiesText = advisor.specialties.slice(0, 3).join(', ');
+  const specialtiesText = (advisor.specialties || []).slice(0, 3).join(', ');
 
   const titles = {
     es: `${advisor.full_name} - Asesor Inmobiliario`,
