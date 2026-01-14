@@ -809,7 +809,39 @@ function enrichResponse(response: any, tenant: TenantConfig, language: string, t
     ...response,
     globalConfig: buildGlobalConfig(tenant, language),
     country: buildCountryData(tenant),
+    countryConfig: buildCountryConfig(tenant),
     language,
     trackingString
+  };
+}
+
+// ============================================================================
+// COUNTRY CONFIG - Configuración específica del país para el frontend
+// ============================================================================
+
+function buildCountryConfig(tenant: TenantConfig): any {
+  // Determinar si es el país por defecto (República Dominicana / CLIC)
+  const isDefaultCountry = tenant.domain === 'clic.do' ||
+                           tenant.name.toLowerCase().includes('clic') ||
+                           tenant.regional?.country_code === 'DO';
+
+  return {
+    code: tenant.regional?.country_code || 'DOM',
+    name: 'República Dominicana',
+    isDefault: isDefaultCountry,
+    showReneBranding: isDefaultCountry,
+    hasContent: true,
+    features: {
+      showFounderStory: isDefaultCountry,
+      showVideos: true,
+      showArticles: true,
+      showTestimonials: true,
+      showFAQs: true,
+      showAdvisors: true
+    },
+    currency: {
+      default: tenant.regional?.currency_default || 'USD',
+      available: ['USD', 'DOP']
+    }
   };
 }
