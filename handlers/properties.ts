@@ -257,13 +257,95 @@ export async function handleSingleProperty(options: {
   // Convertir a formato Supabase completo
   const property = toSupabasePropertyFormat(rawProperty, language, trackingString);
 
+  // Parsear amenidades del campo JSON
+  let amenityNames: string[] = [];
+  if (rawProperty.amenidades) {
+    try {
+      amenityNames = typeof rawProperty.amenidades === 'string'
+        ? JSON.parse(rawProperty.amenidades)
+        : rawProperty.amenidades;
+    } catch (e) {
+      console.warn('Error parsing amenidades:', e);
+    }
+  }
+
   // Obtener datos relacionados en paralelo
-  const [similarProperties, agentProperties, faqs, testimonials] = await Promise.all([
-    getSimilarProperties(tenant.id, rawProperty, language, trackingString),
+  const [similarPropertiesRaw, agentProperties, faqsRaw, testimonialsRaw, recentArticles, recentVideos, amenityDetails] = await Promise.all([
+    db.getSimilarProperties(tenant.id, rawProperty.id, 4),
     getAgentProperties(tenant.id, rawProperty.agente_id, rawProperty.id, language, trackingString),
     db.getFAQs({ tenantId: tenant.id, limit: 6 }),
-    db.getTestimonials(tenant.id, 4)
+    db.getTestimonials(tenant.id, 4),
+    db.getRecentArticles(tenant.id, 4),
+    db.getRecentVideos(tenant.id, 4),
+    amenityNames.length > 0 ? db.getAmenityDetails(tenant.id, amenityNames) : Promise.resolve([])
   ]);
+
+  // Type assertions para los resultados de Neon
+  const faqs = faqsRaw as any[];
+  const testimonials = testimonialsRaw as any[];
+
+  // Procesar amenidades con detalles
+  const amenityDetailsArray = amenityDetails as any[];
+  const processedAmenities = amenityNames.map(name => {
+    const detail = amenityDetailsArray.find((a: any) => a.nombre === name);
+    return {
+      name: name,
+      name_en: detail?.nombre_en || name,
+      name_fr: detail?.nombre_fr || name,
+      icon: detail?.icono || 'fas fa-check',
+      category: detail?.categoria || 'General'
+    };
+  });
+
+  // Formatear propiedades similares
+  const similarPropertiesArray = similarPropertiesRaw as any[];
+  const similarProperties = similarPropertiesArray.map((p: any) => {
+    const price = p.precio_venta || p.precio_alquiler || 0;
+    const currency = p.moneda_venta || p.moneda_alquiler || 'USD';
+    return {
+      id: p.id,
+      title: p.titulo,
+      title_display: p.titulo,
+      price: utils.formatPrice(price, currency, p.precio_venta ? 'venta' : 'alquiler', language),
+      price_display: utils.formatPrice(price, currency, p.precio_venta ? 'venta' : 'alquiler', language),
+      bedrooms: p.habitaciones || 0,
+      bathrooms: p.banos || 0,
+      area: p.m2_construccion || 0,
+      image: p.imagen_principal || '',
+      location: `${p.sector || ''}, ${p.ciudad || ''}`.replace(/^, |, $/g, '') || 'Ubicación no especificada',
+      type: p.tipo || 'Propiedad',
+      url: `/${p.slug}`,
+      is_project: p.is_project || false
+    };
+  });
+
+  // Formatear artículos recientes
+  const recentArticlesArray = recentArticles as any[];
+  const formattedArticles = recentArticlesArray.map((a: any) => ({
+    id: a.id,
+    title: a.titulo,
+    slug: a.slug,
+    excerpt: a.descripcion?.substring(0, 150) + '...' || '',
+    image: a.imagen || '',
+    category: a.categoria_nombre || '',
+    category_slug: a.categoria_slug || '',
+    url: `/articulos/${a.categoria_slug || 'general'}/${a.slug}`
+  }));
+
+  // Formatear videos recientes
+  const recentVideosArray = recentVideos as any[];
+  const formattedVideos = recentVideosArray.map((v: any) => ({
+    id: v.id,
+    title: v.titulo,
+    slug: v.slug,
+    description: v.descripcion?.substring(0, 100) + '...' || '',
+    thumbnail: v.thumbnail || '',
+    video_id: v.video_id || '',
+    duration: v.duracion_segundos || 0,
+    category: v.categoria_nombre || '',
+    category_slug: v.categoria_slug || '',
+    url: `/videos/${v.categoria_slug || 'general'}/${v.slug}`
+  }));
 
   // Construir objeto agente
   const agent = rawProperty.agente_id ? {
@@ -326,40 +408,25 @@ export async function handleSingleProperty(options: {
     },
     // snake_case para compatibilidad con SinglePropertyLayout.astro
     related_content: {
-      articles: [],
-      videos: [],
+      articles: formattedArticles,
+      videos: formattedVideos,
       testimonials: utils.formatTestimonials(testimonials, language, { trackingString }),
-      faqs: faqs.map(f => ({
+      faqs: faqs.map((f: any) => ({
         id: f.id,
         question: f.question,
         answer: f.answer,
         category: f.category
       })),
-      similar_properties: similarProperties.map(p => ({
-        id: p.id,
-        title: p.name,
-        title_display: p.name,
-        price: p.pricing_unified?.display_price?.formatted || 'Precio a consultar',
-        price_display: p.pricing_unified?.display_price?.formatted || 'Precio a consultar',
-        bedrooms: p.bedrooms,
-        bathrooms: p.bathrooms,
-        area: p.built_area,
-        image: p.main_image_url,
-        location: `${p.sectors?.name || ''}, ${p.cities?.name || ''}`.replace(/^, |, $/g, ''),
-        type: p.property_categories?.name,
-        url: p.slug_url,
-        is_project: p.is_project,
-        parking_spots: p.parking_spots
-      })),
+      similar_properties: similarProperties,
       seo_content: [],
       content_source: 'neon_db'
     },
     // También mantener camelCase por compatibilidad legacy
     relatedContent: {
-      articles: [],
-      videos: [],
+      articles: formattedArticles,
+      videos: formattedVideos,
       testimonials: utils.formatTestimonials(testimonials, language, { trackingString }),
-      faqs: faqs.map(f => ({
+      faqs: faqs.map((f: any) => ({
         id: f.id,
         question: f.question,
         answer: f.answer,
@@ -373,26 +440,14 @@ export async function handleSingleProperty(options: {
         default_count: faqs.length + testimonials.length
       }
     },
+    // Amenidades procesadas
+    property_amenities: processedAmenities,
     breadcrumbs,
-    similarProperties: similarProperties.map(p => ({
-      id: p.id,
-      title: p.name,
-      price: p.pricing_unified?.display_price?.formatted || 'Precio a consultar',
-      bedrooms: p.bedrooms,
-      bathrooms: p.bathrooms,
-      area: p.built_area,
-      image: p.main_image_url,
-      location: `${p.sectors?.name || ''}, ${p.cities?.name || ''}`.replace(/^, |, $/g, ''),
-      type: p.property_categories?.name,
-      url: p.slug_url,
-      is_project: p.is_project,
-      parking_spots: p.parking_spots,
-      coordinates: p.cities?.coordinates ? parseCoordinates(p.cities.coordinates) : null
-    })),
+    similarProperties: similarProperties,
     similarPropertiesDebug: {
       total_found: similarProperties.length,
-      tags_used: 2,
-      search_method: 'type_and_location'
+      tags_used: 0,
+      search_method: 'recent_properties'
     },
     seo,
     meta: {
@@ -927,13 +982,25 @@ function generatePropertySEO(prop: any, language: string, tenant: TenantConfig):
 }
 
 function buildLocationData(prop: any): any {
-  const coordinates = parseCoordinates(prop.coordenadas || prop.ciudad_coordenadas);
+  // Usar latitud y longitud directamente si existen
+  let coordinates = null;
+  if (prop.latitud && prop.longitud) {
+    coordinates = {
+      lat: parseFloat(prop.latitud),
+      lng: parseFloat(prop.longitud)
+    };
+  } else {
+    // Fallback a coordenadas de ciudad si existen
+    coordinates = parseCoordinates(prop.ciudad_coordenadas);
+  }
+
+  const hasExactCoords = !!(prop.latitud && prop.longitud);
 
   return {
     coordinates,
-    hasExactCoordinates: !!prop.coordenadas,
+    hasExactCoordinates: hasExactCoords,
     showExactLocation: prop.mostrar_ubicacion_exacta || false,
-    coordinatesSource: prop.coordenadas ? 'property' : prop.ciudad_coordenadas ? 'city' : 'none',
+    coordinatesSource: hasExactCoords ? 'property' : prop.ciudad_coordenadas ? 'city' : 'none',
     address: prop.direccion || '',
     sector: prop.sector,
     city: prop.ciudad,
@@ -974,42 +1041,6 @@ function buildProjectDetails(prop: any): any {
       completion: prop.fecha_entrega
     }
   };
-}
-
-async function getSimilarProperties(
-  tenantId: string,
-  property: any,
-  language: string,
-  trackingString: string
-): Promise<PropertyForList[]> {
-  const sql = db.getSQL();
-
-  const similar = await sql`
-    SELECT
-      p.id, p.slug, p.codigo, p.codigo_publico, p.titulo, p.tipo, p.operacion,
-      p.precio, p.precio_venta, p.precio_alquiler, p.moneda,
-      p.ciudad, p.sector, p.direccion, p.habitaciones, p.banos,
-      p.estacionamientos, p.m2_construccion, p.m2_terreno,
-      p.imagen_principal, p.destacada, p.created_at, p.is_project,
-      p.estado_propiedad
-    FROM propiedades p
-    WHERE p.tenant_id = ${tenantId}
-      AND p.activo = true
-      AND p.estado_propiedad = 'disponible'
-      AND p.id != ${property.id}
-      AND (
-        p.tipo = ${property.tipo}
-        OR LOWER(p.ciudad) = LOWER(${property.ciudad || ''})
-        OR LOWER(p.sector) = LOWER(${property.sector || ''})
-      )
-    ORDER BY
-      CASE WHEN LOWER(p.sector) = LOWER(${property.sector || ''}) THEN 0 ELSE 1 END,
-      CASE WHEN p.tipo = ${property.tipo} THEN 0 ELSE 1 END,
-      p.destacada DESC
-    LIMIT 6
-  `;
-
-  return similar.map(p => toSupabasePropertyFormat(p, language, trackingString));
 }
 
 async function getAgentProperties(

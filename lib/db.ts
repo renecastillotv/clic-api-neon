@@ -848,6 +848,107 @@ export async function getPopularLocations(tenantId: string) {
   return { cities, sectors };
 }
 
+// Obtener artículos recientes
+export async function getRecentArticles(tenantId: string, limit: number = 4) {
+  const sql = getSQL();
+  const result = await sql`
+    SELECT
+      a.id,
+      a.slug,
+      a.titulo,
+      a.descripcion,
+      a.imagen,
+      a.categoria_id,
+      a.created_at,
+      cc.slug as categoria_slug,
+      cc.nombre as categoria_nombre
+    FROM articulos a
+    LEFT JOIN categorias_contenido cc ON a.categoria_id = cc.id
+    WHERE a.tenant_id = ${tenantId}
+      AND a.publicado = true
+    ORDER BY a.created_at DESC
+    LIMIT ${limit}
+  `;
+  return result;
+}
+
+// Obtener detalles de amenidades por nombres
+export async function getAmenityDetails(tenantId: string, amenityNames: string[]) {
+  if (!amenityNames || amenityNames.length === 0) return [];
+
+  const sql = getSQL();
+  const result = await sql`
+    SELECT
+      id,
+      nombre,
+      nombre_en,
+      nombre_fr,
+      icono,
+      categoria
+    FROM amenidades
+    WHERE tenant_id = ${tenantId}
+      AND nombre = ANY(${amenityNames})
+  `;
+  return result;
+}
+
+// Obtener propiedades similares (por ahora las más recientes)
+export async function getSimilarProperties(tenantId: string, excludeId: string, limit: number = 4) {
+  const sql = getSQL();
+  const result = await sql`
+    SELECT
+      p.id,
+      p.titulo,
+      p.slug,
+      p.precio_venta,
+      p.precio_alquiler,
+      p.moneda_venta,
+      p.moneda_alquiler,
+      p.habitaciones,
+      p.banos,
+      p.m2_construccion,
+      p.imagen_principal,
+      p.tipo,
+      p.sector,
+      p.ciudad,
+      p.is_project
+    FROM propiedades p
+    WHERE p.tenant_id = ${tenantId}
+      AND p.id != ${excludeId}
+      AND p.estado_propiedad = 'disponible'
+      AND p.activo = true
+    ORDER BY p.created_at DESC
+    LIMIT ${limit}
+  `;
+  return result;
+}
+
+// Obtener videos recientes
+export async function getRecentVideos(tenantId: string, limit: number = 4) {
+  const sql = getSQL();
+  const result = await sql`
+    SELECT
+      v.id,
+      v.slug,
+      v.titulo,
+      v.descripcion,
+      v.video_url,
+      v.video_id,
+      v.thumbnail,
+      v.duracion_segundos,
+      v.categoria_id,
+      cc.slug as categoria_slug,
+      cc.nombre as categoria_nombre
+    FROM videos v
+    LEFT JOIN categorias_contenido cc ON v.categoria_id = cc.id
+    WHERE v.tenant_id = ${tenantId}
+      AND v.publicado = true
+    ORDER BY v.created_at DESC
+    LIMIT ${limit}
+  `;
+  return result;
+}
+
 export default {
   getSQL,
   query,
@@ -873,5 +974,10 @@ export default {
   getVideoCategories,
   getVideoCategoryBySlug,
   getVideoStats,
-  getRelatedVideos
+  getRelatedVideos,
+  // Nuevas funciones para single property
+  getRecentArticles,
+  getAmenityDetails,
+  getSimilarProperties,
+  getRecentVideos
 };
