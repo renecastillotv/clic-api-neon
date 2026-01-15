@@ -440,7 +440,10 @@ export async function handleSingleProperty(options: {
     external_id: captadorId,
     code: captadorId,
     years_experience: rawProperty.agente_experiencia_anos || 0,
-    specialty_description: '',
+    // specialty_description: usar primera especialidad si existe
+    specialty_description: Array.isArray(rawProperty.agente_especialidades) && rawProperty.agente_especialidades.length > 0
+      ? rawProperty.agente_especialidades[0]
+      : '',
     specialties: rawProperty.agente_especialidades || [],
     languages: rawProperty.agente_idiomas || ['Español'],
     biography: rawProperty.agente_biografia || '',
