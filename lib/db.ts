@@ -262,11 +262,12 @@ export async function getProperties(options: {
 // 1. El slug simple (ej: "apartamento-en-la-julia")
 // 2. La URL completa (ej: "/comprar/apartamento/distrito-nacional/bella-vista/apartamento-en-la-julia")
 // Busca en: slug, slug (último segmento), slug_traducciones
-export async function getPropertyBySlug(slug: string, tenantId: string, language: string = 'es') {
+export async function getPropertyBySlug(slug: string, tenantId: string) {
   const sql = getSQL();
 
   // Extraer el último segmento si es una URL completa
   const slugSimple = slug.includes('/') ? slug.split('/').filter(Boolean).pop() || slug : slug;
+  const slugPattern = '%/' + slugSimple;
 
   const result = await sql`
     SELECT
@@ -283,15 +284,7 @@ export async function getPropertyBySlug(slug: string, tenantId: string, language
       AND p.estado_propiedad IN ('disponible', 'reservado')
       AND (
         p.slug = ${slugSimple}
-        OR p.slug LIKE ${'%/' + slugSimple}
-        OR (
-          p.slug_traducciones IS NOT NULL
-          AND (
-            p.slug_traducciones->>${language} = ${slugSimple}
-            OR p.slug_traducciones->>'en' = ${slugSimple}
-            OR p.slug_traducciones->>'fr' = ${slugSimple}
-          )
-        )
+        OR p.slug LIKE ${slugPattern}
       )
     LIMIT 1
   `;
