@@ -544,6 +544,9 @@ export async function handleSingleProperty(options: {
     available: rawProperty.estado_propiedad === 'disponible',
     property: propertyWithAmenities,
     location,
+    // Detalles del proyecto para ProjectWidget.astro (snake_case para SinglePropertyLayout)
+    project_details: rawProperty.is_project ? buildProjectDetails(rawProperty) : null,
+    // También en camelCase para compatibilidad legacy
     projectDetails: rawProperty.is_project ? buildProjectDetails(rawProperty) : null,
     // Agente con estructura completa (main + cocaptors) como espera el frontend
     agent,
@@ -1199,6 +1202,36 @@ function parseCoordinates(coordString: string | null): { lat: number; lng: numbe
 function buildProjectDetails(prop: any): any {
   if (!prop.is_project) return null;
 
+  // Construir tipología básica basada en los datos de la propiedad
+  // SinglePropertyLayout espera: project_typologies, project_payment_plans, project_phases, developers
+  const typology = {
+    bedrooms: prop.habitaciones || 0,
+    bathrooms: prop.banos || 0,
+    built_area: prop.m2_construccion || 0,
+    sale_price_from: prop.precio_venta || prop.precio || 0,
+    sale_price_to: prop.precio_venta || prop.precio || 0,
+    sale_currency: prop.moneda || 'USD',
+    available_units: 1
+  };
+
+  // Plan de pago predeterminado para proyectos
+  const defaultPaymentPlan = {
+    name: 'Plan Estándar',
+    is_default: true,
+    reservation_amount: prop.monto_reserva || 1000,
+    reservation_currency: prop.moneda_reserva || 'USD',
+    separation_percentage: prop.porcentaje_separacion || 10,
+    construction_percentage: prop.porcentaje_construccion || 60,
+    delivery_percentage: prop.porcentaje_entrega || 30
+  };
+
+  // Fase del proyecto
+  const projectPhase = {
+    phase_name: prop.fase_nombre || 'Fase 1',
+    estimated_delivery: prop.fecha_entrega || null,
+    completion_percentage: prop.porcentaje_avance || 0
+  };
+
   return {
     id: prop.proyecto_id,
     name: prop.proyecto_nombre || prop.titulo,
@@ -1206,7 +1239,18 @@ function buildProjectDetails(prop: any): any {
       construction: prop.estado_construccion || 'En construcción',
       sales: 'En venta',
       completion: prop.fecha_entrega
-    }
+    },
+    // Estructuras que espera SinglePropertyLayout.astro
+    project_typologies: [typology],
+    project_payment_plans: [defaultPaymentPlan],
+    project_phases: [projectPhase],
+    // Desarrollador (si existe en los datos)
+    developers: prop.desarrollador_nombre ? {
+      name: prop.desarrollador_nombre,
+      logo_url: prop.desarrollador_logo || null,
+      years_experience: prop.desarrollador_experiencia || null,
+      total_projects: prop.desarrollador_proyectos || null
+    } : null
   };
 }
 
