@@ -324,6 +324,37 @@ export async function handleSingleProperty(options: {
       agent_id: rawProperty.agente_id,
       excluded_property: rawProperty.id
     },
+    // snake_case para compatibilidad con SinglePropertyLayout.astro
+    related_content: {
+      articles: [],
+      videos: [],
+      testimonials: utils.formatTestimonials(testimonials, language, { trackingString }),
+      faqs: faqs.map(f => ({
+        id: f.id,
+        question: f.question,
+        answer: f.answer,
+        category: f.category
+      })),
+      similar_properties: similarProperties.map(p => ({
+        id: p.id,
+        title: p.name,
+        title_display: p.name,
+        price: p.pricing_unified?.display_price?.formatted || 'Precio a consultar',
+        price_display: p.pricing_unified?.display_price?.formatted || 'Precio a consultar',
+        bedrooms: p.bedrooms,
+        bathrooms: p.bathrooms,
+        area: p.built_area,
+        image: p.main_image_url,
+        location: `${p.sectors?.name || ''}, ${p.cities?.name || ''}`.replace(/^, |, $/g, ''),
+        type: p.property_categories?.name,
+        url: p.slug_url,
+        is_project: p.is_project,
+        parking_spots: p.parking_spots
+      })),
+      seo_content: [],
+      content_source: 'neon_db'
+    },
+    // También mantener camelCase por compatibilidad legacy
     relatedContent: {
       articles: [],
       videos: [],
@@ -520,7 +551,23 @@ function toSupabasePropertyFormat(prop: any, language: string, trackingString: s
     nuevo: prop.nuevo || false,
     parqueos: prop.estacionamientos || prop.parking || 0,
     url: slugUrl,
-    isFormattedByProvider: true
+    isFormattedByProvider: true,
+
+    // ============================================================
+    // Campos _display para SinglePropertyLayout.astro
+    // ============================================================
+    title_display: prop.titulo || 'Propiedad sin nombre',
+    price_display: pricingUnified.display_price.formatted,
+    operation_display: language === 'es'
+      ? (operationType === 'venta' ? 'En Venta' : 'En Alquiler')
+      : language === 'en'
+        ? (operationType === 'venta' ? 'For Sale' : 'For Rent')
+        : (operationType === 'venta' ? 'À Vendre' : 'À Louer'),
+    description_display: prop.descripcion || prop.short_description || '',
+    processed_images: {
+      final_images: allImages.length > 0 ? allImages : [mainImage || 'https://via.placeholder.com/400x300/e5e7eb/9ca3af?text=Sin+Imagen'],
+      main_image: mainImage || 'https://via.placeholder.com/400x300/e5e7eb/9ca3af?text=Sin+Imagen'
+    }
   };
 }
 
