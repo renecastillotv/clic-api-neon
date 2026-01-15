@@ -4,6 +4,8 @@
 
 import db from '../lib/db';
 import utils from '../lib/utils';
+import videosHandler from './videos';
+import articlesHandler from './articles';
 import type { TenantConfig } from '../types';
 
 // ============================================================================
@@ -24,14 +26,18 @@ export async function handleHomepage(options: {
     quickStats,
     testimonials,
     advisors,
-    faqs
+    faqs,
+    videosData,
+    articlesData
   ] = await Promise.all([
     db.getFeaturedProperties(tenant.id, 12),
     db.getPopularLocations(tenant.id),
     db.getQuickStats(tenant.id),
     db.getTestimonials(tenant.id, 6),
     db.getAdvisors(tenant.id, 4),
-    db.getFAQs({ tenantId: tenant.id, limit: 6 })
+    db.getFAQs({ tenantId: tenant.id, limit: 6 }),
+    videosHandler.handleVideosMain({ tenant, language, trackingString, page: 1, limit: 6 }),
+    articlesHandler.handleArticles({ tenant, language, trackingString, page: 1, limit: 4 })
   ]);
 
   // Convertir propiedades al formato Supabase
@@ -40,8 +46,12 @@ export async function handleHomepage(options: {
   // Construir searchTags en formato Supabase
   const searchTags = buildSearchTags(popularLocations, language);
 
+  // Extraer videos y artículos reales de los handlers
+  const realVideos = videosData?.recentVideos || videosData?.featuredVideos || [];
+  const realArticles = (articlesData as any)?.recentArticles || (articlesData as any)?.featuredArticles || [];
+
   // Construir sections
-  const sections = buildHomepageSections(tenant, featuredProperties, testimonials, advisors, faqs, language, trackingString);
+  const sections = buildHomepageSections(tenant, featuredProperties, testimonials, advisors, faqs, language, trackingString, realVideos, realArticles);
 
   // Generar SEO
   const seo = generateHomepageSEO(tenant, language);
@@ -70,29 +80,59 @@ export async function handleHomepage(options: {
       }
     },
     relatedContent: {
-      articles: [],
-      videos: [],
-      testimonials: testimonials.map(t => ({
-        id: t.id,
-        content: t.content,
-        rating: t.rating || 5,
-        client_name: t.client_name,
-        client_photo: t.client_photo,
-        client_location: t.client_location,
-        is_featured: t.is_featured
+      articles: realArticles.slice(0, 4).map((a: any) => ({
+        id: a.id,
+        slug: a.slug,
+        title: a.title,
+        excerpt: a.excerpt,
+        image: a.featuredImage,
+        category: a.category?.name || '',
+        published_at: a.publishedAt,
+        author: a.author?.name || 'Equipo CLIC',
+        url: a.url
       })),
-      faqs: faqs.map(f => ({
-        id: f.id,
-        question: f.question,
-        answer: f.answer,
-        category: f.category,
-        order: f.order
+      videos: realVideos.slice(0, 3).map((v: any) => ({
+        id: v.id,
+        slug: v.slug,
+        title: v.title,
+        thumbnail: v.thumbnail,
+        youtube_id: v.videoId,
+        duration: v.durationFormatted,
+        views: v.views,
+        published_at: v.publishedAt,
+        url: v.url
       })),
+      testimonials: testimonials.map(t => {
+        // Extraer contenido según idioma si es un objeto, o usar directamente si es string
+        let contentText = '';
+        if (typeof t.content === 'string') {
+          contentText = t.content;
+        } else if (t.content && typeof t.content === 'object') {
+          contentText = t.content[language] || t.content.es || t.content.en || Object.values(t.content)[0] || '';
+        }
+
+        // También verificar traducciones si existen
+        if (!contentText && t.translations) {
+          const translations = typeof t.translations === 'string' ? JSON.parse(t.translations) : t.translations;
+          contentText = translations?.contenido?.[language] || translations?.contenido?.es || translations?.content?.[language] || '';
+        }
+
+        return {
+          id: t.id,
+          content: contentText,
+          rating: t.rating || 5,
+          client_name: t.client_name,
+          client_photo: t.client_photo,
+          client_location: t.client_location,
+          is_featured: t.is_featured
+        };
+      }),
+      // FAQs removidos de aquí - ya están en sections para evitar duplicación
       seo_content: [],
       content_source: 'neon_db',
       hierarchy_info: {
         specific_count: 0,
-        tag_related_count: faqs.length + testimonials.length,
+        tag_related_count: testimonials.length,
         default_count: 0
       },
       carousels: [{
@@ -296,7 +336,9 @@ function buildHomepageSections(
   advisors: any[],
   faqs: any[],
   language: string,
-  trackingString: string
+  trackingString: string,
+  realVideos: any[] = [],
+  realArticles: any[] = []
 ): any[] {
   const sections = [];
 
@@ -323,14 +365,30 @@ function buildHomepageSections(
     sections.push({
       type: 'testimonials',
       title: getTranslatedText('Lo que dicen nuestros clientes', 'What our clients say', 'Ce que disent nos clients', language),
-      testimonials: testimonials.map(t => ({
-        id: t.id,
-        content: t.content,
-        rating: t.rating || 5,
-        client_name: t.client_name,
-        client_photo: t.client_photo,
-        client_location: t.client_location
-      })),
+      testimonials: testimonials.map(t => {
+        // Extraer contenido según idioma si es un objeto, o usar directamente si es string
+        let contentText = '';
+        if (typeof t.content === 'string') {
+          contentText = t.content;
+        } else if (t.content && typeof t.content === 'object') {
+          contentText = t.content[language] || t.content.es || t.content.en || Object.values(t.content)[0] || '';
+        }
+
+        // También verificar traducciones si existen
+        if (!contentText && t.translations) {
+          const translations = typeof t.translations === 'string' ? JSON.parse(t.translations) : t.translations;
+          contentText = translations?.contenido?.[language] || translations?.contenido?.es || translations?.content?.[language] || '';
+        }
+
+        return {
+          id: t.id,
+          content: contentText,
+          rating: t.rating || 5,
+          client_name: t.client_name,
+          client_photo: t.client_photo,
+          client_location: t.client_location
+        };
+      }),
       countryContext: {
         averageRating: 4.9
       }
@@ -377,11 +435,34 @@ function buildHomepageSections(
     });
   }
 
-  // Content Mix - Videos y Artículos (hardcodeados ya que no están en Neon)
+  // Content Mix - Videos y Artículos reales de la base de datos
+  const formattedVideos = realVideos.slice(0, 3).map((v: any) => ({
+    id: v.id,
+    title: v.title,
+    thumbnail: v.thumbnail,
+    youtube_id: v.videoId,
+    duration: v.durationFormatted,
+    views: v.views,
+    published_at: v.publishedAt,
+    url: v.url
+  }));
+
+  const formattedArticles = realArticles.slice(0, 4).map((a: any) => ({
+    id: a.id,
+    title: a.title,
+    excerpt: a.excerpt,
+    image: a.featuredImage,
+    slug: a.slug,
+    category: a.category?.name || '',
+    published_at: a.publishedAt,
+    author: a.author?.name || 'Equipo CLIC',
+    url: a.url
+  }));
+
   sections.push({
     type: 'content-mix',
-    videos: getDefaultVideos(language),
-    articles: getDefaultArticles(language)
+    videos: formattedVideos.length > 0 ? formattedVideos : getDefaultVideos(language),
+    articles: formattedArticles.length > 0 ? formattedArticles : getDefaultArticles(language)
   });
 
   // Founder Story - Datos de René Castillo (hardcodeados)
@@ -410,8 +491,8 @@ function buildHomepageSections(
       }
     },
     recentContent: {
-      videos: getDefaultVideos(language),
-      articles: getDefaultArticles(language)
+      videos: formattedVideos.length > 0 ? formattedVideos : getDefaultVideos(language),
+      articles: formattedArticles.length > 0 ? formattedArticles : getDefaultArticles(language)
     }
   });
 
