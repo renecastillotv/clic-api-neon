@@ -489,6 +489,195 @@ export function extractTrackingString(searchParams: URLSearchParams): string {
   return params.length > 0 ? `?${params.join('&')}` : '';
 }
 
+// ============================================================================
+// FORMATO UNIFICADO DE TESTIMONIOS
+// ============================================================================
+
+/**
+ * Interfaz unificada para testimonios.
+ * Todos los handlers deben usar este formato para consistencia en el frontend.
+ */
+export interface UnifiedTestimonial {
+  id: string;
+  // Contenido del testimonio
+  content: string;
+  excerpt: string;
+  full_testimonial: string;
+  subtitle: string;
+  // Rating (número entre 1-5)
+  rating: number;
+  // Título opcional
+  title: string | null;
+  // Información del cliente (ambos formatos: snake_case y camelCase)
+  client_name: string;
+  clientName: string;
+  client_photo: string | null;
+  clientAvatar: string | null;
+  client_avatar: string | null;
+  client_location: string | null;
+  clientLocation: string | null;
+  transaction_location: string | null;
+  transactionLocation: string | null;
+  client_profession: string | null;
+  clientProfession: string | null;
+  // Metadata
+  featured: boolean;
+  is_featured: boolean;
+  client_verified: boolean;
+  clientVerified: boolean;
+  published_at: string | null;
+  publishedAt: string | null;
+  // URL y slug para enlaces
+  url: string | null;
+  slug: string;
+  // Campos para página de testimonios
+  category: string;
+  views: string;
+  readTime: string;
+  status: 'approved' | 'pending' | 'rejected';
+  agent: {
+    name: string;
+    avatar: string;
+    slug: string;
+    position: string;
+  };
+}
+
+/**
+ * Formatea un testimonio crudo de la base de datos al formato unificado.
+ * Esta función debe usarse en TODOS los handlers para garantizar consistencia.
+ *
+ * @param rawTestimonial - Testimonio crudo de la base de datos
+ * @param language - Idioma actual ('es', 'en', 'fr')
+ * @param options - Opciones adicionales
+ * @returns Testimonio formateado
+ */
+export function formatTestimonial(
+  rawTestimonial: Record<string, any>,
+  language: string,
+  options: {
+    trackingString?: string;
+    categorySlug?: string;
+    baseUrl?: string;
+  } = {}
+): UnifiedTestimonial {
+  const { trackingString = '', categorySlug = 'compradores', baseUrl = '/testimonios' } = options;
+
+  // Extraer contenido según idioma
+  let contentText = '';
+  if (typeof rawTestimonial.content === 'string') {
+    contentText = rawTestimonial.content;
+  } else if (rawTestimonial.content && typeof rawTestimonial.content === 'object') {
+    contentText = rawTestimonial.content[language] ||
+                  rawTestimonial.content.es ||
+                  rawTestimonial.content.en ||
+                  Object.values(rawTestimonial.content)[0] as string || '';
+  }
+
+  // Verificar traducciones si no hay contenido
+  if (!contentText && rawTestimonial.translations) {
+    try {
+      const translations = typeof rawTestimonial.translations === 'string'
+        ? JSON.parse(rawTestimonial.translations)
+        : rawTestimonial.translations;
+      contentText = translations?.contenido?.[language] ||
+                    translations?.contenido?.es ||
+                    translations?.content?.[language] || '';
+    } catch {
+      // Ignorar errores de parsing
+    }
+  }
+
+  // Generar excerpt (primeros 150 caracteres)
+  const excerpt = contentText.length > 150
+    ? contentText.substring(0, 150) + '...'
+    : contentText;
+
+  // Generar título si no existe
+  const rating = parseFloat(rawTestimonial.rating) || 5;
+  const defaultTitle = rating >= 5
+    ? (language === 'en' ? 'Excellent experience' : language === 'fr' ? 'Excellente expérience' : 'Excelente experiencia')
+    : rating >= 4
+    ? (language === 'en' ? 'Very good experience' : language === 'fr' ? 'Très bonne expérience' : 'Muy buena experiencia')
+    : (language === 'en' ? 'Good experience' : language === 'fr' ? 'Bonne expérience' : 'Buena experiencia');
+
+  // Generar slug
+  const testimonialSlug = rawTestimonial.slug || `testimonio-${rawTestimonial.id?.substring(0, 8) || 'default'}`;
+
+  // Construir URL
+  const langPrefix = language === 'es' ? '' : `/${language}`;
+  const testimonialBaseUrl = language === 'en' ? '/testimonials' : language === 'fr' ? '/temoignages' : '/testimonios';
+  const url = `${langPrefix}${testimonialBaseUrl}/${categorySlug}/${testimonialSlug}${trackingString}`;
+
+  // Datos del cliente
+  const clientName = rawTestimonial.client_name || 'Cliente';
+  const clientPhoto = rawTestimonial.client_photo || null;
+  const clientLocation = rawTestimonial.client_location || null;
+  const isFeatured = rawTestimonial.is_featured || rawTestimonial.featured || false;
+
+  return {
+    id: rawTestimonial.id,
+    // Contenido
+    content: contentText,
+    excerpt: excerpt,
+    full_testimonial: contentText,
+    subtitle: '',
+    // Rating
+    rating: Math.round(rating),
+    // Título
+    title: rawTestimonial.title || defaultTitle,
+    // Cliente - snake_case
+    client_name: clientName,
+    client_photo: clientPhoto,
+    client_avatar: clientPhoto,
+    client_location: clientLocation,
+    transaction_location: clientLocation,
+    transactionLocation: clientLocation,
+    client_profession: rawTestimonial.client_profession || null,
+    // Cliente - camelCase (para compatibilidad con diferentes componentes)
+    clientName: clientName,
+    clientAvatar: clientPhoto,
+    clientLocation: clientLocation,
+    clientProfession: rawTestimonial.client_profession || null,
+    // Metadata
+    featured: isFeatured,
+    is_featured: isFeatured,
+    client_verified: isFeatured,
+    clientVerified: isFeatured,
+    published_at: rawTestimonial.created_at || rawTestimonial.fecha || null,
+    publishedAt: rawTestimonial.created_at || rawTestimonial.fecha || null,
+    // URL y slug
+    url: url,
+    slug: testimonialSlug,
+    // Campos para página de testimonios
+    category: categorySlug,
+    views: '0',
+    readTime: '2 min',
+    status: 'approved' as const,
+    agent: {
+      name: 'Equipo CLIC',
+      avatar: '',
+      slug: '',
+      position: 'Asesor Inmobiliario'
+    }
+  };
+}
+
+/**
+ * Formatea múltiples testimonios al formato unificado.
+ */
+export function formatTestimonials(
+  rawTestimonials: Record<string, any>[],
+  language: string,
+  options: {
+    trackingString?: string;
+    categorySlug?: string;
+    baseUrl?: string;
+  } = {}
+): UnifiedTestimonial[] {
+  return rawTestimonials.map(t => formatTestimonial(t, language, options));
+}
+
 export default {
   getLocalizedText,
   getTranslatedField,
@@ -508,5 +697,7 @@ export default {
   safeNumber,
   slugify,
   detectLanguageFromPath,
-  extractTrackingString
+  extractTrackingString,
+  formatTestimonial,
+  formatTestimonials
 };

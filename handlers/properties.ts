@@ -179,15 +179,7 @@ export async function handlePropertyList(options: {
     relatedContent: {
       articles: [],
       videos: [],
-      testimonials: testimonials.map(t => ({
-        id: t.id,
-        content: t.content,
-        rating: t.rating || 5,
-        client_name: t.client_name,
-        client_photo: t.client_photo,
-        client_location: t.client_location,
-        is_featured: t.is_featured
-      })),
+      testimonials: utils.formatTestimonials(testimonials, language, { trackingString }),
       faqs: faqs.map(f => ({
         id: f.id,
         question: f.question,
@@ -331,13 +323,7 @@ export async function handleSingleProperty(options: {
     relatedContent: {
       articles: [],
       videos: [],
-      testimonials: testimonials.map(t => ({
-        id: t.id,
-        content: t.content,
-        rating: t.rating || 5,
-        client_name: t.client_name,
-        client_photo: t.client_photo
-      })),
+      testimonials: utils.formatTestimonials(testimonials, language, { trackingString }),
       faqs: faqs.map(f => ({
         id: f.id,
         question: f.question,

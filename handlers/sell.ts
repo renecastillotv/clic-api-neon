@@ -469,22 +469,8 @@ export async function handleSell(options: {
     price: formatPrice(parseFloat(sale.valor_cierre || '0'), sale.moneda || 'USD')
   }));
 
-  // Testimonials
-  const processedTestimonials: Testimonial[] = testimonials.map((t: any) => {
-    const content = typeof t.content === 'object'
-      ? (t.content[language] || t.content.es || '')
-      : (t.content || '');
-
-    return {
-      id: t.id,
-      rating: parseInt(t.rating) || 5,
-      title: t.title || (language === 'en' ? 'Excellent experience' : language === 'fr' ? 'Excellente expérience' : 'Excelente experiencia'),
-      excerpt: content.length > 150 ? content.substring(0, 150) + '...' : content,
-      clientName: t.client_name || 'Cliente',
-      clientAvatar: t.client_photo || '',
-      clientProfession: t.client_location || ''
-    };
-  });
+  // Testimonials - usando formato unificado
+  const processedTestimonials = utils.formatTestimonials(testimonials, language, { trackingString });
 
   // Información de contacto del tenant
   const contactInfo = {

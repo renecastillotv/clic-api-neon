@@ -102,36 +102,7 @@ export async function handleHomepage(options: {
         published_at: v.publishedAt,
         url: v.url
       })),
-      testimonials: testimonials.map(t => {
-        // Extraer contenido según idioma si es un objeto, o usar directamente si es string
-        let contentText = '';
-        if (typeof t.content === 'string') {
-          contentText = t.content;
-        } else if (t.content && typeof t.content === 'object') {
-          contentText = t.content[language] || t.content.es || t.content.en || Object.values(t.content)[0] || '';
-        }
-
-        // También verificar traducciones si existen
-        if (!contentText && t.translations) {
-          const translations = typeof t.translations === 'string' ? JSON.parse(t.translations) : t.translations;
-          contentText = translations?.contenido?.[language] || translations?.contenido?.es || translations?.content?.[language] || '';
-        }
-
-        return {
-          id: t.id,
-          content: contentText,
-          excerpt: contentText,
-          full_testimonial: contentText,
-          rating: t.rating || 5,
-          client_name: t.client_name,
-          client_photo: t.client_photo,
-          client_avatar: t.client_photo,
-          client_location: t.client_location,
-          transaction_location: t.client_location,
-          is_featured: t.is_featured,
-          featured: t.is_featured || false
-        };
-      }),
+      testimonials: utils.formatTestimonials(testimonials, language, { trackingString }),
       // FAQs removidos de aquí - ya están en sections para evitar duplicación
       seo_content: [],
       content_source: 'neon_db',
@@ -365,41 +336,12 @@ function buildHomepageSections(
     });
   }
 
-  // Testimonials - APLANADO
+  // Testimonials - APLANADO (usando formato unificado)
   if (testimonials.length > 0) {
     sections.push({
       type: 'testimonials',
       title: getTranslatedText('Lo que dicen nuestros clientes', 'What our clients say', 'Ce que disent nos clients', language),
-      testimonials: testimonials.map(t => {
-        // Extraer contenido según idioma si es un objeto, o usar directamente si es string
-        let contentText = '';
-        if (typeof t.content === 'string') {
-          contentText = t.content;
-        } else if (t.content && typeof t.content === 'object') {
-          contentText = t.content[language] || t.content.es || t.content.en || Object.values(t.content)[0] || '';
-        }
-
-        // También verificar traducciones si existen
-        if (!contentText && t.translations) {
-          const translations = typeof t.translations === 'string' ? JSON.parse(t.translations) : t.translations;
-          contentText = translations?.contenido?.[language] || translations?.contenido?.es || translations?.content?.[language] || '';
-        }
-
-        return {
-          id: t.id,
-          content: contentText,
-          // El componente Testimonials.astro usa excerpt o full_testimonial
-          excerpt: contentText,
-          full_testimonial: contentText,
-          rating: t.rating || 5,
-          client_name: t.client_name,
-          client_photo: t.client_photo,
-          client_avatar: t.client_photo,
-          client_location: t.client_location,
-          transaction_location: t.client_location,
-          featured: t.is_featured || false
-        };
-      }),
+      testimonials: utils.formatTestimonials(testimonials, language, { trackingString }),
       countryContext: {
         averageRating: 4.9
       }

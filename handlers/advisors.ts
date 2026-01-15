@@ -214,32 +214,8 @@ export async function handleSingleAdvisor(options: {
   // Generar SEO
   const seo = generateSingleAdvisorSEO(advisor, language, tenant, propertyCards.length);
 
-  // Mapear testimonios al formato que espera el frontend (SingleAdvisorLayout.astro)
-  const mappedTestimonials = testimonials.map(t => {
-    // Obtener el contenido del testimonio
-    const testimonialContent = typeof t.content === 'object'
-      ? (t.content[language] || t.content.es || '')
-      : (t.content || '');
-
-    return {
-      id: t.id,
-      // Campos que espera el frontend
-      rating: parseInt(t.rating) || 5,  // Frontend espera número para las estrellas
-      title: t.title || null,
-      excerpt: testimonialContent,  // Frontend usa excerpt
-      full_testimonial: testimonialContent,  // Alias
-      clientName: t.client_name,  // Frontend usa camelCase
-      clientAvatar: t.client_photo || null,  // Frontend usa clientAvatar
-      clientLocation: t.client_location || null,
-      // Campos originales para compatibilidad
-      content: { [language]: testimonialContent },
-      client_name: t.client_name,
-      client_photo: t.client_photo,
-      client_location: t.client_location,
-      status: 'approved' as const,
-      is_featured: t.is_featured || false
-    };
-  });
+  // Mapear testimonios usando el formato unificado
+  const mappedTestimonials = utils.formatTestimonials(testimonials, language, { trackingString });
 
   return {
     type: 'advisor-single',
