@@ -295,7 +295,8 @@ function toSupabasePropertyFormat(prop: any, language: string, trackingString: s
     destacado: prop.destacado || prop.is_featured || false,
     nuevo: prop.nuevo || false,
     parqueos: prop.estacionamientos || prop.parking || 0,
-    url: slugUrl
+    url: slugUrl,
+    isFormattedByProvider: true
   };
 }
 
