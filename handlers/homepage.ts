@@ -214,8 +214,15 @@ function toSupabasePropertyFormat(prop: any, language: string, trackingString: s
 
   const mainImage = prop.imagen_principal || '';
   const slugUrl = buildPropertySlugUrl(prop, language);
+  const propertyType = formatPropertyType(prop.tipo, language);
+  const sectorName = prop.sector || '';
+  const cityName = prop.ciudad || '';
+  const bedroomsCount = prop.habitaciones || 0;
+  const bathroomsCount = prop.banos || 0;
+  const builtArea = prop.m2_construccion || prop.area_construida || 0;
 
   return {
+    // Campos originales del formato Supabase
     id: prop.id,
     code: prop.codigo || prop.id,
     name: prop.titulo || 'Propiedad sin nombre',
@@ -230,10 +237,10 @@ function toSupabasePropertyFormat(prop: any, language: string, trackingString: s
     temp_rental_currency: currency,
     furnished_rental_price: null,
     furnished_rental_currency: currency,
-    bedrooms: prop.habitaciones || 0,
-    bathrooms: prop.banos || 0,
+    bedrooms: bedroomsCount,
+    bathrooms: bathroomsCount,
     parking_spots: prop.estacionamientos || prop.parking || 0,
-    built_area: prop.m2_construccion || prop.area_construida || null,
+    built_area: builtArea,
     land_area: prop.m2_terreno || prop.area_total || null,
     main_image_url: mainImage,
     gallery_images_url: '',
@@ -244,16 +251,16 @@ function toSupabasePropertyFormat(prop: any, language: string, trackingString: s
     exact_coordinates: null,
     show_exact_location: false,
     property_categories: {
-      name: formatPropertyType(prop.tipo, language),
+      name: propertyType,
       description: ''
     },
     cities: {
-      name: prop.ciudad || '',
+      name: cityName,
       coordinates: null,
       provinces: { name: prop.provincia || '', coordinates: null }
     },
     sectors: {
-      name: prop.sector || '',
+      name: sectorName,
       coordinates: null
     },
     property_images: mainImage ? [{ url: mainImage, title: 'Imagen Principal', is_main: true, sort_order: 0 }] : [],
@@ -263,10 +270,28 @@ function toSupabasePropertyFormat(prop: any, language: string, trackingString: s
     images_count: mainImage ? 1 : 0,
     location: {
       address: prop.direccion || '',
-      sector: prop.sector,
-      city: prop.ciudad,
+      sector: sectorName,
+      city: cityName,
       province: prop.provincia
-    }
+    },
+
+    // ============================================================
+    // Campos que espera PropertyCarousel.astro (formato español)
+    // ============================================================
+    slug: slugUrl,
+    titulo: prop.titulo || 'Propiedad sin nombre',
+    precio: pricingUnified.display_price.formatted,
+    imagen: mainImage,
+    imagenes: mainImage ? [mainImage] : [],
+    sector: sectorName || cityName || 'Ubicación no especificada',
+    habitaciones: bedroomsCount,
+    banos: bathroomsCount,
+    metros: parseFloat(String(builtArea)) || 0,
+    tipo: propertyType,
+    destacado: prop.destacado || prop.is_featured || false,
+    nuevo: prop.nuevo || false,
+    parqueos: prop.estacionamientos || prop.parking || 0,
+    url: slugUrl
   };
 }
 
