@@ -167,7 +167,60 @@ async function handleTestimonialsCategory(options: {
   const categoryConfig = TESTIMONIAL_CATEGORIES[categorySlug as keyof typeof TESTIMONIAL_CATEGORIES];
 
   if (!categoryConfig) {
-    return { type: '404' };
+    // Soft 404: devolver página de categoría con notFound para preservar SEO
+    const seo = utils.generateSEO({
+      title: `${categorySlug} | Testimonios | ${tenant.name}`,
+      description: `Categoría de testimonios`,
+      canonicalUrl: buildCategoryUrl(categorySlug, language, ''),
+      language,
+      siteName: tenant.name
+    });
+
+    const breadcrumbs = [
+      { name: language === 'en' ? 'Home' : language === 'fr' ? 'Accueil' : 'Inicio', url: language === 'es' ? '/' : `/${language}/` },
+      { name: language === 'en' ? 'Testimonials' : language === 'fr' ? 'Témoignages' : 'Testimonios', url: buildBaseUrl(language) },
+      { name: categorySlug, url: buildCategoryUrl(categorySlug, language, '') }
+    ];
+
+    // Obtener todos los testimonios para mostrar contenido alternativo
+    const testimonials = await db.getTestimonials(tenant.id, limit) as Record<string, any>[];
+    const processedTestimonials = testimonials.map((item: Record<string, any>) =>
+      processTestimonial(item, language, trackingString, DEFAULT_CATEGORY)
+    );
+
+    return {
+      type: 'testimonials-category',
+      notFound: true,
+      notFoundMessage: language === 'en' ? 'Category not found' : language === 'fr' ? 'Catégorie non trouvée' : 'Categoría no encontrada',
+      language,
+      tenant,
+      seo: { ...seo, breadcrumbs },
+      trackingString,
+      category: {
+        slug: categorySlug,
+        name: categorySlug,
+        description: '',
+        url: buildCategoryUrl(categorySlug, language, trackingString)
+      },
+      categorySlug,
+      testimonials: processedTestimonials,
+      suggestedCategories: Object.values(TESTIMONIAL_CATEGORIES).map(cat => ({
+        slug: cat.slug,
+        name: cat.name[language as keyof typeof cat.name] || cat.name.es,
+        url: buildCategoryUrl(cat.slug, language, trackingString)
+      })),
+      stats: {
+        totalTestimonials: processedTestimonials.length
+      },
+      pagination: {
+        page,
+        limit,
+        total_items: processedTestimonials.length,
+        total_pages: Math.ceil(processedTestimonials.length / limit),
+        has_next: false,
+        has_prev: false
+      }
+    };
   }
 
   // Obtener todos los testimonios
@@ -248,13 +301,71 @@ async function handleSingleTestimonial(options: {
     return itemSlug === slug;
   });
 
-  if (!testimonialItem) {
-    return { type: '404' };
-  }
-
   // Verificar categoría
   const categoryConfig = TESTIMONIAL_CATEGORIES[categorySlug as keyof typeof TESTIMONIAL_CATEGORIES]
     || TESTIMONIAL_CATEGORIES[DEFAULT_CATEGORY];
+  const categoryName = categoryConfig.name[language as keyof typeof categoryConfig.name] || categoryConfig.name.es;
+
+  if (!testimonialItem) {
+    // Soft 404: devolver página de testimonio individual con notFound para preservar SEO
+    const testimonialUrl = buildTestimonialUrl(categorySlug, slug, language, trackingString);
+
+    const seo = utils.generateSEO({
+      title: `Testimonio | ${tenant.name}`,
+      description: language === 'en' ? 'Testimonial not found' : language === 'fr' ? 'Témoignage non trouvé' : 'Testimonio no encontrado',
+      canonicalUrl: testimonialUrl,
+      language,
+      siteName: tenant.name
+    });
+
+    const breadcrumbs = [
+      { name: language === 'en' ? 'Home' : language === 'fr' ? 'Accueil' : 'Inicio', url: language === 'es' ? '/' : `/${language}/` },
+      { name: language === 'en' ? 'Testimonials' : language === 'fr' ? 'Témoignages' : 'Testimonios', url: buildBaseUrl(language) },
+      { name: categoryName, url: buildCategoryUrl(categorySlug, language, '') },
+      { name: slug, url: testimonialUrl }
+    ];
+
+    // Obtener testimonios para mostrar como contenido alternativo
+    const relatedTestimonials = testimonials
+      .slice(0, 6)
+      .map((t: Record<string, any>) => processTestimonial(t, language, trackingString, categorySlug));
+
+    return {
+      type: 'testimonials-single',
+      notFound: true,
+      notFoundMessage: language === 'en' ? 'Testimonial not found' : language === 'fr' ? 'Témoignage non trouvé' : 'Testimonio no encontrado',
+      language,
+      tenant,
+      seo: { ...seo, breadcrumbs },
+      trackingString,
+      testimonial: {
+        id: '',
+        title: language === 'en' ? 'Testimonial not found' : language === 'fr' ? 'Témoignage non trouvé' : 'Testimonio no encontrado',
+        excerpt: '',
+        fullTestimonial: '',
+        rating: 5,
+        clientName: '',
+        clientAvatar: '',
+        clientLocation: '',
+        clientVerified: false,
+        url: testimonialUrl,
+        slug: slug,
+        agent: { name: '', avatar: '', slug: '', position: '' }
+      },
+      category: {
+        slug: categorySlug,
+        name: categoryName
+      },
+      relatedTestimonials,
+      suggestedTestimonials: relatedTestimonials,
+      crossContent: {
+        testimonials: relatedTestimonials,
+        videos: [],
+        articles: [],
+        properties: []
+      }
+    };
+  }
 
   const processedTestimonial = processTestimonial(testimonialItem, language, trackingString, categorySlug);
 
@@ -268,9 +379,6 @@ async function handleSingleTestimonial(options: {
     .filter((t: Record<string, any>) => t.id !== testimonialItem.id)
     .slice(0, 6)
     .map((t: Record<string, any>) => processTestimonial(t, language, trackingString, categorySlug));
-
-  // Nombres de categoría
-  const categoryName = categoryConfig.name[language as keyof typeof categoryConfig.name] || categoryConfig.name.es;
 
   // Generar SEO
   const seo = utils.generateSEO({

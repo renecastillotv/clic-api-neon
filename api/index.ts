@@ -179,18 +179,13 @@ export default async function handler(request: Request): Promise<Response> {
         if (segments.length > 1) {
           // Asesor individual
           const advisorSlug = segments[1];
-          const advisorResponse = await advisorsHandler.handleSingleAdvisor({
+          // handleSingleAdvisor ahora devuelve soft 404 con notFound: true si no encuentra
+          response = await advisorsHandler.handleSingleAdvisor({
             tenant,
             advisorSlug,
             language,
             trackingString,
           });
-
-          if (!advisorResponse) {
-            response = build404Response(tenant, language, trackingString);
-          } else {
-            response = advisorResponse;
-          }
         } else {
           // Lista de asesores
           response = await advisorsHandler.handleAdvisorsList({
@@ -221,11 +216,8 @@ export default async function handler(request: Request): Promise<Response> {
           limit,
         });
 
-        if (articlesResult.type === '404') {
-          response = build404Response(tenant, language, trackingString);
-        } else {
-          response = articlesResult as any;
-        }
+        // handleArticles ahora devuelve soft 404 con notFound: true si no encuentra
+        response = articlesResult as any;
         break;
 
       case 'videos':
@@ -246,11 +238,8 @@ export default async function handler(request: Request): Promise<Response> {
           limit,
         });
 
-        if (videosResult.type === '404') {
-          response = build404Response(tenant, language, trackingString);
-        } else {
-          response = videosResult as any;
-        }
+        // handleVideos ahora devuelve soft 404 con notFound: true si no encuentra
+        response = videosResult as any;
         break;
 
       case 'testimonials':
@@ -271,11 +260,8 @@ export default async function handler(request: Request): Promise<Response> {
           limit,
         });
 
-        if (testimonialsResult.type === '404') {
-          response = build404Response(tenant, language, trackingString);
-        } else {
-          response = testimonialsResult as any;
-        }
+        // handleTestimonials ahora devuelve soft 404 con notFound: true si no encuentra
+        response = testimonialsResult as any;
         break;
 
       case 'favorites':

@@ -905,10 +905,48 @@ export async function handleArticles(options: {
       });
 
       if (!result) {
+        // Soft 404: devolver página de artículo con notFound para preservar SEO
+        const articleUrl = utils.buildUrl(`/articulos/${categorySlug}/${slug}`, language);
+
+        // Obtener artículos relacionados para mostrar contenido alternativo
+        const mainResult = await handleArticlesMain({ tenant, language, trackingString, page: 1, limit: 6 });
+        const suggestedArticles = mainResult?.recentArticles || [];
+
         return {
-          type: '404',
-          message: getUIText('NOT_FOUND', language),
-        };
+          type: 'articles-single',
+          notFound: true,
+          notFoundMessage: getUIText('NOT_FOUND', language),
+          language,
+          tenant,
+          seo: {
+            title: `${slug} | ${tenant.name}`,
+            description: language === 'en' ? 'Article not found' : language === 'fr' ? 'Article non trouvé' : 'Artículo no encontrado',
+            canonical_url: articleUrl,
+          },
+          trackingString,
+          article: {
+            id: '',
+            slug: slug,
+            title: language === 'en' ? 'Article not found' : language === 'fr' ? 'Article non trouvé' : 'Artículo no encontrado',
+            excerpt: '',
+            content: '',
+            featuredImage: '',
+            publishedAt: new Date().toISOString(),
+            views: 0,
+            readTime: '0 min',
+            readTimeMinutes: 0,
+            featured: false,
+            url: articleUrl,
+            author: { id: '', name: '', avatar: '', slug: null, position: null, bio: null, email: null, phone: null },
+          },
+          category: {
+            id: '',
+            name: categorySlug,
+            slug: categorySlug,
+          },
+          relatedArticles: suggestedArticles,
+          suggestedArticles,
+        } as any;
       }
 
       return result;
@@ -926,10 +964,44 @@ export async function handleArticles(options: {
       });
 
       if (!result) {
+        // Soft 404: devolver página de categoría con notFound para preservar SEO
+        const categoryUrl = utils.buildUrl(`/articulos/${categorySlug}`, language);
+
+        // Obtener artículos para mostrar contenido alternativo
+        const mainResult = await handleArticlesMain({ tenant, language, trackingString, page: 1, limit: 12 });
+        const suggestedArticles = mainResult?.recentArticles || [];
+        const categories = mainResult?.categories || [];
+
         return {
-          type: '404',
-          message: getUIText('NOT_FOUND', language),
-        };
+          type: 'articles-category',
+          notFound: true,
+          notFoundMessage: getUIText('NOT_FOUND', language),
+          language,
+          tenant,
+          seo: {
+            title: `${categorySlug} | ${tenant.name}`,
+            description: language === 'en' ? 'Category not found' : language === 'fr' ? 'Catégorie non trouvée' : 'Categoría no encontrada',
+            canonical_url: categoryUrl,
+          },
+          trackingString,
+          category: {
+            id: '',
+            name: categorySlug,
+            slug: categorySlug,
+            description: '',
+            articleCount: 0,
+          },
+          articles: suggestedArticles,
+          suggestedCategories: categories,
+          pagination: {
+            page: 1,
+            limit,
+            total: 0,
+            totalPages: 0,
+            hasNext: false,
+            hasPrev: false,
+          },
+        } as any;
       }
 
       return result;

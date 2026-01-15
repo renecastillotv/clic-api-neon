@@ -991,10 +991,48 @@ export async function handleVideos(options: {
       });
 
       if (!result) {
+        // Soft 404: devolver página de video con notFound para preservar SEO
+        const videoUrl = utils.buildUrl(`/videos/${categorySlug}/${slug}`, language);
+
+        // Obtener videos relacionados para mostrar contenido alternativo
+        const mainResult = await handleVideosMain({ tenant, language, trackingString, page: 1, limit: 6 });
+        const suggestedVideos = mainResult?.recentVideos || mainResult?.featuredVideos || [];
+
         return {
-          type: '404',
-          message: getUIText('NOT_FOUND', language),
-        };
+          type: 'videos-single',
+          notFound: true,
+          notFoundMessage: getUIText('NOT_FOUND', language),
+          language,
+          tenant,
+          seo: {
+            title: `${slug} | ${tenant.name}`,
+            description: language === 'en' ? 'Video not found' : language === 'fr' ? 'Vidéo non trouvée' : 'Video no encontrado',
+            canonical_url: videoUrl,
+          },
+          trackingString,
+          video: {
+            id: '',
+            slug: slug,
+            title: language === 'en' ? 'Video not found' : language === 'fr' ? 'Vidéo non trouvée' : 'Video no encontrado',
+            description: '',
+            thumbnail: '',
+            videoId: '',
+            platform: 'youtube',
+            duration: '0:00',
+            publishedAt: new Date().toISOString(),
+            views: 0,
+            featured: false,
+            url: videoUrl,
+            author: { id: '', name: '', avatar: '', slug: null, position: null },
+          },
+          category: {
+            id: '',
+            name: categorySlug,
+            slug: categorySlug,
+          },
+          relatedVideos: suggestedVideos,
+          suggestedVideos,
+        } as any;
       }
 
       return result;
@@ -1012,10 +1050,44 @@ export async function handleVideos(options: {
       });
 
       if (!result) {
+        // Soft 404: devolver página de categoría con notFound para preservar SEO
+        const categoryUrl = utils.buildUrl(`/videos/${categorySlug}`, language);
+
+        // Obtener videos para mostrar contenido alternativo
+        const mainResult = await handleVideosMain({ tenant, language, trackingString, page: 1, limit: 12 });
+        const suggestedVideos = mainResult?.recentVideos || mainResult?.featuredVideos || [];
+        const categories = mainResult?.categories || [];
+
         return {
-          type: '404',
-          message: getUIText('NOT_FOUND', language),
-        };
+          type: 'videos-category',
+          notFound: true,
+          notFoundMessage: getUIText('NOT_FOUND', language),
+          language,
+          tenant,
+          seo: {
+            title: `${categorySlug} | ${tenant.name}`,
+            description: language === 'en' ? 'Category not found' : language === 'fr' ? 'Catégorie non trouvée' : 'Categoría no encontrada',
+            canonical_url: categoryUrl,
+          },
+          trackingString,
+          category: {
+            id: '',
+            name: categorySlug,
+            slug: categorySlug,
+            description: '',
+            videoCount: 0,
+          },
+          videos: suggestedVideos,
+          suggestedCategories: categories,
+          pagination: {
+            page: 1,
+            limit,
+            total: 0,
+            totalPages: 0,
+            hasNext: false,
+            hasPrev: false,
+          },
+        } as any;
       }
 
       return result;

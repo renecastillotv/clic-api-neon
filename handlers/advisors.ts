@@ -79,7 +79,7 @@ export async function handleSingleAdvisor(options: {
   advisorSlug: string;
   language: string;
   trackingString: string;
-}): Promise<SingleAdvisorResponse | null> {
+}): Promise<SingleAdvisorResponse | any> {
   const { tenant, advisorSlug, language, trackingString } = options;
   const sql = db.getSQL();
 
@@ -87,7 +87,67 @@ export async function handleSingleAdvisor(options: {
   const rawAdvisor = await db.getAdvisorBySlug(advisorSlug, tenant.id);
 
   if (!rawAdvisor) {
-    return null;
+    // Soft 404: devolver página de asesor con notFound para preservar SEO
+    const advisorUrl = utils.buildUrl(`/asesores/${advisorSlug}`, language);
+
+    // Obtener otros asesores para mostrar como contenido alternativo
+    const otherAdvisors = await db.getAdvisors(tenant.id, 6);
+    const suggestedAdvisors = otherAdvisors.map((a: any) => processAdvisor(a, language, trackingString));
+
+    const seo = generateSingleAdvisorSEO(
+      {
+        name: advisorSlug,
+        slug: advisorSlug,
+        position: '',
+        avatar: '',
+        phone: '',
+        whatsapp: '',
+        email: '',
+        bio: '',
+        languages: [],
+        specialties: [],
+        stats: { yearsExperience: 0, totalSales: 0, clientSatisfaction: 0, avgResponseTime: '' },
+        url: advisorUrl,
+        socialLinks: {}
+      },
+      language,
+      tenant,
+      0
+    );
+
+    return {
+      type: 'advisor-single',
+      notFound: true,
+      notFoundMessage: language === 'en' ? 'Advisor not found' : language === 'fr' ? 'Conseiller non trouvé' : 'Asesor no encontrado',
+      language,
+      tenant,
+      seo,
+      trackingString,
+      advisor: {
+        id: '',
+        name: advisorSlug,
+        slug: advisorSlug,
+        position: '',
+        avatar: '',
+        phone: '',
+        whatsapp: '',
+        email: '',
+        bio: '',
+        languages: [],
+        specialties: [],
+        stats: { yearsExperience: 0, totalSales: 0, clientSatisfaction: 0, avgResponseTime: '' },
+        url: advisorUrl,
+        socialLinks: {}
+      },
+      properties: [],
+      testimonials: [],
+      articles: [],
+      videos: [],
+      suggestedAdvisors,
+      stats: {},
+      services: [],
+      contactMethods: []
+    };
   }
 
   // Procesar asesor
