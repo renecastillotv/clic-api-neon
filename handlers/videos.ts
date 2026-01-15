@@ -332,33 +332,66 @@ async function handleVideosMain(options: {
     `;
 
     // Query: Videos destacados (excluyendo el hero)
-    const featuredResult = await sql`
-      SELECT
-        v.id,
-        v.slug,
-        v.titulo,
-        v.descripcion,
-        v.tipo_video,
-        v.video_url,
-        v.video_id,
-        v.thumbnail,
-        v.duracion_segundos,
-        v.fecha_publicacion,
-        v.vistas,
-        v.destacado,
-        v.traducciones,
-        v.categoria_id,
-        cc.slug as categoria_slug,
-        cc.nombre as categoria_nombre
-      FROM videos v
-      LEFT JOIN categorias_contenido cc ON v.categoria_id = cc.id
-      WHERE v.tenant_id = ${tenant.id}::uuid
-        AND v.publicado = true
-        AND v.destacado = true
-        ${heroResult.length > 0 ? sql`AND v.id != ${(heroResult as any[])[0].id}::uuid` : sql``}
-      ORDER BY v.orden ASC, v.fecha_publicacion DESC NULLS LAST
-      LIMIT 6
-    `;
+    // Usamos una query sin condición dinámica para evitar errores de sintaxis con Neon
+    const heroId = heroResult.length > 0 ? (heroResult as any[])[0].id : null;
+
+    let featuredResult: any[];
+    if (heroId) {
+      featuredResult = await sql`
+        SELECT
+          v.id,
+          v.slug,
+          v.titulo,
+          v.descripcion,
+          v.tipo_video,
+          v.video_url,
+          v.video_id,
+          v.thumbnail,
+          v.duracion_segundos,
+          v.fecha_publicacion,
+          v.vistas,
+          v.destacado,
+          v.traducciones,
+          v.categoria_id,
+          cc.slug as categoria_slug,
+          cc.nombre as categoria_nombre
+        FROM videos v
+        LEFT JOIN categorias_contenido cc ON v.categoria_id = cc.id
+        WHERE v.tenant_id = ${tenant.id}::uuid
+          AND v.publicado = true
+          AND v.destacado = true
+          AND v.id != ${heroId}::uuid
+        ORDER BY v.orden ASC, v.fecha_publicacion DESC NULLS LAST
+        LIMIT 6
+      ` as any[];
+    } else {
+      featuredResult = await sql`
+        SELECT
+          v.id,
+          v.slug,
+          v.titulo,
+          v.descripcion,
+          v.tipo_video,
+          v.video_url,
+          v.video_id,
+          v.thumbnail,
+          v.duracion_segundos,
+          v.fecha_publicacion,
+          v.vistas,
+          v.destacado,
+          v.traducciones,
+          v.categoria_id,
+          cc.slug as categoria_slug,
+          cc.nombre as categoria_nombre
+        FROM videos v
+        LEFT JOIN categorias_contenido cc ON v.categoria_id = cc.id
+        WHERE v.tenant_id = ${tenant.id}::uuid
+          AND v.publicado = true
+          AND v.destacado = true
+        ORDER BY v.orden ASC, v.fecha_publicacion DESC NULLS LAST
+        LIMIT 6
+      ` as any[];
+    }
 
     // Query: Videos recientes (paginados)
     const recentResult = await sql`
