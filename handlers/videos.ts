@@ -283,11 +283,17 @@ async function handleVideosMain(options: {
   console.log('[Videos Handler] tenant.id:', tenant.id);
 
   try {
-    // Query simple para debug - contar todos los videos del tenant
+    // Query simple para debug - contar todos los videos del tenant (sin filtros)
     const debugCount = await sql`
-      SELECT COUNT(*) as total FROM videos WHERE tenant_id = ${tenant.id}
+      SELECT COUNT(*) as total FROM videos WHERE tenant_id = ${tenant.id}::uuid
     `;
-    console.log('[Videos Handler] Total videos in DB for tenant:', debugCount);
+    console.log('[Videos Handler] Total videos in DB for tenant (sin filtros):', debugCount);
+
+    // Query debug con filtro publicado
+    const debugPublished = await sql`
+      SELECT COUNT(*) as total FROM videos WHERE tenant_id = ${tenant.id}::uuid AND publicado = true
+    `;
+    console.log('[Videos Handler] Total videos publicados:', debugPublished);
 
     // Query: Video destacado principal (hero)
     const heroResult = await sql`
@@ -312,7 +318,7 @@ async function handleVideosMain(options: {
         cc.nombre as categoria_nombre
       FROM videos v
       LEFT JOIN categorias_contenido cc ON v.categoria_id = cc.id
-      WHERE v.tenant_id = ${tenant.id}
+      WHERE v.tenant_id = ${tenant.id}::uuid
         AND v.publicado = true
         AND v.destacado = true
       ORDER BY v.orden ASC, v.fecha_publicacion DESC NULLS LAST
@@ -340,10 +346,10 @@ async function handleVideosMain(options: {
         cc.nombre as categoria_nombre
       FROM videos v
       LEFT JOIN categorias_contenido cc ON v.categoria_id = cc.id
-      WHERE v.tenant_id = ${tenant.id}
+      WHERE v.tenant_id = ${tenant.id}::uuid
         AND v.publicado = true
         AND v.destacado = true
-        ${heroResult.length > 0 ? sql`AND v.id != ${(heroResult as any[])[0].id}` : sql``}
+        ${heroResult.length > 0 ? sql`AND v.id != ${(heroResult as any[])[0].id}::uuid` : sql``}
       ORDER BY v.orden ASC, v.fecha_publicacion DESC NULLS LAST
       LIMIT 6
     `;
@@ -369,11 +375,13 @@ async function handleVideosMain(options: {
         cc.nombre as categoria_nombre
       FROM videos v
       LEFT JOIN categorias_contenido cc ON v.categoria_id = cc.id
-      WHERE v.tenant_id = ${tenant.id}
+      WHERE v.tenant_id = ${tenant.id}::uuid
         AND v.publicado = true
       ORDER BY v.destacado DESC, v.fecha_publicacion DESC NULLS LAST
       LIMIT ${limit} OFFSET ${offset}
     `;
+
+    console.log('[Videos Handler] recentResult count:', (recentResult as any[]).length);
 
     // Query: Categorías de videos
     const categoriesResult = await sql`
@@ -388,10 +396,10 @@ async function handleVideosMain(options: {
           FROM videos v
           WHERE v.categoria_id = cc.id
             AND v.publicado = true
-            AND v.tenant_id = ${tenant.id}
+            AND v.tenant_id = ${tenant.id}::uuid
         ), 0) as video_count
       FROM categorias_contenido cc
-      WHERE cc.tenant_id = ${tenant.id}
+      WHERE cc.tenant_id = ${tenant.id}::uuid
         AND cc.activa = true
         AND cc.tipo = 'video'
       ORDER BY cc.orden ASC, cc.nombre ASC
@@ -404,7 +412,7 @@ async function handleVideosMain(options: {
         COALESCE(SUM(vistas), 0) as total_views,
         COUNT(CASE WHEN destacado = true THEN 1 END) as featured_count
       FROM videos
-      WHERE tenant_id = ${tenant.id}
+      WHERE tenant_id = ${tenant.id}::uuid
         AND publicado = true
     `;
 
@@ -412,7 +420,7 @@ async function handleVideosMain(options: {
     const countResult = await sql`
       SELECT COUNT(*) as total
       FROM videos
-      WHERE tenant_id = ${tenant.id}
+      WHERE tenant_id = ${tenant.id}::uuid
         AND publicado = true
     `;
 
@@ -448,7 +456,7 @@ async function handleVideosMain(options: {
     const uncategorizedResult = await sql`
       SELECT COUNT(*) as count
       FROM videos
-      WHERE tenant_id = ${tenant.id}
+      WHERE tenant_id = ${tenant.id}::uuid
         AND publicado = true
         AND categoria_id IS NULL
     `;
@@ -562,7 +570,7 @@ async function handleVideosCategory(options: {
     const countResult = await sql`
       SELECT COUNT(*) as total
       FROM videos
-      WHERE tenant_id = ${tenant.id}
+      WHERE tenant_id = ${tenant.id}::uuid
         AND publicado = true
         AND categoria_id IS NULL
     `;
@@ -604,7 +612,7 @@ async function handleVideosCategory(options: {
         'general' as categoria_slug,
         ${category.name} as categoria_nombre
       FROM videos v
-      WHERE v.tenant_id = ${tenant.id}
+      WHERE v.tenant_id = ${tenant.id}::uuid
         AND v.publicado = true
         AND v.categoria_id IS NULL
       ORDER BY v.destacado DESC, v.fecha_publicacion DESC NULLS LAST
@@ -621,7 +629,7 @@ async function handleVideosCategory(options: {
         cc.descripcion as description,
         cc.traducciones
       FROM categorias_contenido cc
-      WHERE cc.tenant_id = ${tenant.id}
+      WHERE cc.tenant_id = ${tenant.id}::uuid
         AND cc.slug = ${categorySlug}
         AND cc.activa = true
         AND cc.tipo = 'video'
@@ -662,8 +670,8 @@ async function handleVideosCategory(options: {
         ${categoryData.slug} as categoria_slug,
         ${categoryData.name} as categoria_nombre
       FROM videos v
-      WHERE v.tenant_id = ${tenant.id}
-        AND v.categoria_id = ${categoryData.id}
+      WHERE v.tenant_id = ${tenant.id}::uuid
+        AND v.categoria_id = ${categoryData.id}::uuid
         AND v.publicado = true
       ORDER BY v.destacado DESC, v.fecha_publicacion DESC NULLS LAST
       LIMIT ${limit} OFFSET ${offset}
@@ -672,8 +680,8 @@ async function handleVideosCategory(options: {
     const countResult = await sql`
       SELECT COUNT(*) as total
       FROM videos
-      WHERE tenant_id = ${tenant.id}
-        AND categoria_id = ${categoryData.id}
+      WHERE tenant_id = ${tenant.id}::uuid
+        AND categoria_id = ${categoryData.id}::uuid
         AND publicado = true
     `;
     totalVideos = parseInt((countResult as any[])[0]?.total || '0', 10);
@@ -751,7 +759,7 @@ async function handleSingleVideo(options: {
       cc.descripcion as categoria_descripcion
     FROM videos v
     LEFT JOIN categorias_contenido cc ON v.categoria_id = cc.id
-    WHERE v.tenant_id = ${tenant.id}
+    WHERE v.tenant_id = ${tenant.id}::uuid
       AND v.slug = ${videoSlug}
       AND v.publicado = true
     LIMIT 1
@@ -795,11 +803,11 @@ async function handleSingleVideo(options: {
       cc.nombre as categoria_nombre
     FROM videos v
     LEFT JOIN categorias_contenido cc ON v.categoria_id = cc.id
-    WHERE v.tenant_id = ${tenant.id}
+    WHERE v.tenant_id = ${tenant.id}::uuid
       AND v.publicado = true
-      AND v.id != ${videoData.id}
+      AND v.id != ${videoData.id}::uuid
     ORDER BY
-      CASE WHEN v.categoria_id = ${videoData.categoria_id} THEN 0 ELSE 1 END,
+      CASE WHEN v.categoria_id = ${videoData.categoria_id}::uuid THEN 0 ELSE 1 END,
       v.fecha_publicacion DESC NULLS LAST
     LIMIT 6
   `;
