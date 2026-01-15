@@ -12,6 +12,7 @@ import advisorsHandler from '../handlers/advisors';
 import homepageHandler from '../handlers/homepage';
 import articlesHandler from '../handlers/articles';
 import videosHandler from '../handlers/videos';
+import sellHandler from '../handlers/sell';
 
 import type { TenantConfig, ApiResponse, Error404Response } from '../types';
 
@@ -295,18 +296,12 @@ export default async function handler(request: Request): Promise<Response> {
         break;
 
       case 'sell':
-        // TODO: Implementar handler de vender
-        response = {
-          type: 'sell',
-          language,
+        // Handler de vender con estadísticas de ventas
+        response = await sellHandler.handleSell({
           tenant,
-          seo: utils.generateSEO({
-            title: 'Vender tu propiedad',
-            description: 'Vende tu propiedad con nosotros',
-            language,
-          }),
+          language,
           trackingString,
-        } as any;
+        });
         break;
 
       case 'vacation-rentals':
