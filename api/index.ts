@@ -125,9 +125,9 @@ export default async function handler(request: Request): Promise<Response> {
     }
 
     // Parsear la ruta
-    const { language, segments, routeType, isPropertySlug } = parseRoute(pathname);
+    const { language, segments, routeType, lastSegment } = parseRoute(pathname);
 
-    console.log(`[API] Parsed route:`, { language, segments, routeType, isPropertySlug });
+    console.log(`[API] Parsed route:`, { language, segments, routeType, lastSegment });
 
     // Extraer tracking string
     const trackingString = utils.extractTrackingString(searchParams);
@@ -149,6 +149,24 @@ export default async function handler(request: Request): Promise<Response> {
         break;
 
       case 'property-list':
+        // Si hay un último segmento, verificar si es una propiedad individual
+        if (lastSegment && segments.length > 1) {
+          // Buscar si el último segmento es un slug de propiedad en la BD
+          const singlePropertyResponse = await propertiesHandler.handleSingleProperty({
+            tenant,
+            propertySlug: lastSegment,
+            language,
+            trackingString,
+          });
+
+          if (singlePropertyResponse) {
+            // Es una propiedad individual
+            response = singlePropertyResponse;
+            break;
+          }
+        }
+
+        // No es single-property, mostrar lista de propiedades
         response = await propertiesHandler.handlePropertyList({
           tenant,
           tags: segments,
@@ -479,6 +497,7 @@ function parseRoute(pathname: string): {
   segments: string[];
   routeType: string;
   isPropertySlug: boolean;
+  lastSegment: string | null;
 } {
   // Limpiar pathname
   const cleanPath = pathname.replace(/^\/+|\/+$/g, '');
@@ -493,7 +512,7 @@ function parseRoute(pathname: string): {
 
   // Homepage
   if (segments.length === 0) {
-    return { language, segments: [], routeType: 'homepage', isPropertySlug: false };
+    return { language, segments: [], routeType: 'homepage', isPropertySlug: false, lastSegment: null };
   }
 
   // Detectar tipo de ruta
@@ -502,49 +521,24 @@ function parseRoute(pathname: string): {
   const routeType = routes[firstSegment];
 
   if (routeType) {
-    // Si es property-list y tiene más de 3 segmentos (comprar/tipo/ciudad/sector/slug),
-    // verificar si el último segmento parece ser un slug de propiedad
-    if (routeType === 'property-list' && segments.length > 3) {
-      const lastSegment = segments[segments.length - 1];
-      if (looksLikePropertySlug(lastSegment)) {
-        return {
-          language,
-          segments,
-          routeType: 'single-property',
-          isPropertySlug: true,
-        };
-      }
-    }
-
+    // Es una ruta especial conocida (asesores, articulos, videos, etc.)
     return {
       language,
       segments,
       routeType,
       isPropertySlug: false,
+      lastSegment: segments.length > 1 ? segments[segments.length - 1] : null,
     };
   }
 
-  // Si no es una ruta especial, asumir que es una propiedad individual o 404
-  // Las propiedades tienen formato: /categoria/ubicacion/slug-propiedad
-  if (segments.length >= 1) {
-    // Verificar si el último segmento parece ser un slug de propiedad
-    const lastSegment = segments[segments.length - 1];
-    if (looksLikePropertySlug(lastSegment)) {
-      return {
-        language,
-        segments,
-        routeType: 'single-property',
-        isPropertySlug: true,
-      };
-    }
-  }
-
-  // Por defecto, tratar como lista de propiedades
+  // No es una ruta especial conocida - tratar como property-list por defecto
+  // La verificación de single-property se hará en el handler consultando la BD
   return {
     language,
     segments,
     routeType: 'property-list',
     isPropertySlug: false,
+    lastSegment: segments.length > 0 ? segments[segments.length - 1] : null,
   };
 }
 

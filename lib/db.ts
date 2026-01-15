@@ -258,8 +258,16 @@ export async function getProperties(options: {
 }
 
 // Obtener propiedad individual por slug
-export async function getPropertyBySlug(slug: string, tenantId: string) {
+// El slug puede ser:
+// 1. El slug simple (ej: "apartamento-en-la-julia")
+// 2. La URL completa (ej: "/comprar/apartamento/distrito-nacional/bella-vista/apartamento-en-la-julia")
+// Busca en: slug, slug (último segmento), slug_traducciones
+export async function getPropertyBySlug(slug: string, tenantId: string, language: string = 'es') {
   const sql = getSQL();
+
+  // Extraer el último segmento si es una URL completa
+  const slugSimple = slug.includes('/') ? slug.split('/').filter(Boolean).pop() || slug : slug;
+
   const result = await sql`
     SELECT
       p.*,
@@ -271,9 +279,20 @@ export async function getPropertyBySlug(slug: string, tenantId: string) {
       u.slug as agente_slug
     FROM propiedades p
     LEFT JOIN usuarios u ON p.agente_id = u.id
-    WHERE p.slug = ${slug}
-      AND p.tenant_id = ${tenantId}
+    WHERE p.tenant_id = ${tenantId}
       AND p.estado_propiedad IN ('disponible', 'reservado')
+      AND (
+        p.slug = ${slugSimple}
+        OR p.slug LIKE ${'%/' + slugSimple}
+        OR (
+          p.slug_traducciones IS NOT NULL
+          AND (
+            p.slug_traducciones->>${language} = ${slugSimple}
+            OR p.slug_traducciones->>'en' = ${slugSimple}
+            OR p.slug_traducciones->>'fr' = ${slugSimple}
+          )
+        )
+      )
     LIMIT 1
   `;
   return result[0] || null;
