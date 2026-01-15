@@ -11,6 +11,7 @@ import contentHandler from '../handlers/content';
 import advisorsHandler from '../handlers/advisors';
 import homepageHandler from '../handlers/homepage';
 import articlesHandler from '../handlers/articles';
+import videosHandler from '../handlers/videos';
 
 import type { TenantConfig, ApiResponse, Error404Response } from '../types';
 
@@ -228,8 +229,28 @@ export default async function handler(request: Request): Promise<Response> {
         break;
 
       case 'videos':
-        // Videos con datos hardcodeados (no hay tabla en Neon)
-        response = buildVideosResponse(tenant, language, trackingString);
+        // Estructura: /videos, /videos/categoria, /videos/categoria/slug-video
+        // segments[0] = 'videos'
+        // segments[1] = categorySlug (si existe)
+        // segments[2] = videoSlug (si existe)
+        const videoCategorySlug = segments.length >= 2 ? segments[1] : undefined;
+        const videoSlug = segments.length >= 3 ? segments[2] : undefined;
+
+        const videosResult = await videosHandler.handleVideos({
+          tenant,
+          slug: videoSlug,
+          categorySlug: videoCategorySlug,
+          language,
+          trackingString,
+          page,
+          limit,
+        });
+
+        if (videosResult.type === '404') {
+          response = build404Response(tenant, language, trackingString);
+        } else {
+          response = videosResult as any;
+        }
         break;
 
       case 'testimonials':
@@ -583,218 +604,6 @@ function jsonResponse(data: any, status: number = 200): Response {
       ...corsHeaders,
     },
   });
-}
-
-// ============================================================================
-// VIDEOS RESPONSE - Datos hardcodeados (no hay tabla en Neon)
-// ============================================================================
-
-function buildVideosResponse(tenant: TenantConfig, language: string, trackingString: string): any {
-  const baseUrl = language === 'es' ? '' : `/${language}`;
-
-  const allVideos = [
-    {
-      id: 'vid-001',
-      title: 'Proyecto nuevo en Bávaro - Oportunidad de Inversión',
-      description: 'Descubre este increíble proyecto nuevo en Bávaro con excelentes opciones de inversión.',
-      thumbnail: 'https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?w=800&h=450&fit=crop',
-      slug: 'proyecto-nuevo-bavaro',
-      videoSlug: 'videos/lanzamientos/proyecto-nuevo-bavaro',
-      duration: '10:00',
-      publishedAt: '2025-01-10T12:00:00Z',
-      views: 1250,
-      featured: true,
-      url: `${baseUrl}/videos/lanzamientos/proyecto-nuevo-bavaro`,
-      author: {
-        name: 'René Castillo',
-        avatar: 'https://img.clerk.com/eyJ0eXBlIjoicHJveHkiLCJzcmMiOiJodHRwczovL2ltYWdlcy5jbGVyay5kZXYvdXBsb2FkZWQvaW1nXzM1dGlTWTl6WmswRUdrR2w2d0pNS0tzS2F2TCJ9',
-        slug: 'rene-castillo',
-        position: 'Fundador CLIC Inmobiliaria'
-      },
-      category: { id: 'cat-1', name: 'Lanzamientos', slug: 'lanzamientos' }
-    },
-    {
-      id: 'vid-002',
-      title: 'Recorrido Villa Oceánica en Cap Cana',
-      description: 'Tour completo por esta increíble villa de lujo en Cap Cana con vistas al mar.',
-      thumbnail: 'https://images.unsplash.com/photo-1613490493576-7fde63acd811?w=800&h=450&fit=crop',
-      slug: 'recorrido-villa-oceanica-cap-cana',
-      videoSlug: 'videos/recorridos/recorrido-villa-oceanica-cap-cana',
-      duration: '8:45',
-      publishedAt: '2025-01-08T10:00:00Z',
-      views: 980,
-      featured: true,
-      url: `${baseUrl}/videos/recorridos/recorrido-villa-oceanica-cap-cana`,
-      author: {
-        name: 'René Castillo',
-        avatar: 'https://img.clerk.com/eyJ0eXBlIjoicHJveHkiLCJzcmMiOiJodHRwczovL2ltYWdlcy5jbGVyay5kZXYvdXBsb2FkZWQvaW1nXzM1dGlTWTl6WmswRUdrR2w2d0pNS0tzS2F2TCJ9',
-        slug: 'rene-castillo',
-        position: 'Fundador CLIC Inmobiliaria'
-      },
-      category: { id: 'cat-2', name: 'Recorridos', slug: 'recorridos' }
-    },
-    {
-      id: 'vid-003',
-      title: 'Tips de Decoración para Apartamentos Modernos',
-      description: 'Consejos profesionales de decoración para transformar tu apartamento.',
-      thumbnail: 'https://images.unsplash.com/photo-1618221195710-dd6b41faaea6?w=800&h=450&fit=crop',
-      slug: 'tips-decoracion-apartamentos-modernos',
-      videoSlug: 'videos/decoracion/tips-decoracion-apartamentos-modernos',
-      duration: '12:30',
-      publishedAt: '2025-01-05T14:00:00Z',
-      views: 756,
-      featured: false,
-      url: `${baseUrl}/videos/decoracion/tips-decoracion-apartamentos-modernos`,
-      author: {
-        name: 'Equipo CLIC',
-        avatar: '/images/team/clic-experts.jpg',
-        slug: 'equipo-clic',
-        position: 'Especialista en Diseño'
-      },
-      category: { id: 'cat-3', name: 'Decoración', slug: 'decoracion' }
-    },
-    {
-      id: 'vid-004',
-      title: 'Tour por Apartamento de Lujo en Naco',
-      description: 'Conoce este espectacular apartamento en una de las mejores zonas de Santo Domingo.',
-      thumbnail: 'https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?w=800&h=450&fit=crop',
-      slug: 'tour-naco-lujo',
-      videoSlug: 'videos/recorridos/tour-naco-lujo',
-      duration: '10:00',
-      publishedAt: '2025-01-03T09:00:00Z',
-      views: 645,
-      featured: false,
-      url: `${baseUrl}/videos/recorridos/tour-naco-lujo`,
-      author: {
-        name: 'René Castillo',
-        avatar: 'https://img.clerk.com/eyJ0eXBlIjoicHJveHkiLCJzcmMiOiJodHRwczovL2ltYWdlcy5jbGVyay5kZXYvdXBsb2FkZWQvaW1nXzM1dGlTWTl6WmswRUdrR2w2d0pNS0tzS2F2TCJ9',
-        slug: 'rene-castillo',
-        position: 'Fundador CLIC Inmobiliaria'
-      },
-      category: { id: 'cat-2', name: 'Recorridos', slug: 'recorridos' }
-    },
-    {
-      id: 'vid-005',
-      title: 'Tendencias de Decoración para 2025',
-      description: 'Lo último en tendencias para que tu casa se vea hermosa este 2025.',
-      thumbnail: 'https://images.unsplash.com/photo-1616486338812-3dadae4b4ace?w=800&h=450&fit=crop',
-      slug: 'tendencias-decoracion-2025',
-      videoSlug: 'videos/decoracion/tendencias-decoracion-2025',
-      duration: '9:00',
-      publishedAt: '2025-01-01T11:00:00Z',
-      views: 532,
-      featured: false,
-      url: `${baseUrl}/videos/decoracion/tendencias-decoracion-2025`,
-      author: {
-        name: 'René Castillo',
-        avatar: 'https://img.clerk.com/eyJ0eXBlIjoicHJveHkiLCJzcmMiOiJodHRwczovL2ltYWdlcy5jbGVyay5kZXYvdXBsb2FkZWQvaW1nXzM1dGlTWTl6WmswRUdrR2w2d0pNS0tzS2F2TCJ9',
-        slug: 'rene-castillo',
-        position: 'Fundador CLIC Inmobiliaria'
-      },
-      category: { id: 'cat-3', name: 'Decoración', slug: 'decoracion' }
-    },
-    {
-      id: 'vid-006',
-      title: 'Video de Bienvenida - Conoce CLIC Inmobiliaria',
-      description: 'Video introductorio de CLIC y René Castillo para compradores de propiedades.',
-      thumbnail: 'https://images.unsplash.com/photo-1560518883-ce09059eeffa?w=800&h=450&fit=crop',
-      slug: 'bienvenida-clic-inmobiliaria',
-      videoSlug: 'videos/entrevistas/bienvenida-clic-inmobiliaria',
-      duration: '5:30',
-      publishedAt: '2024-12-28T15:00:00Z',
-      views: 1890,
-      featured: true,
-      url: `${baseUrl}/videos/entrevistas/bienvenida-clic-inmobiliaria`,
-      author: {
-        name: 'René Castillo',
-        avatar: 'https://img.clerk.com/eyJ0eXBlIjoicHJveHkiLCJzcmMiOiJodHRwczovL2ltYWdlcy5jbGVyay5kZXYvdXBsb2FkZWQvaW1nXzM1dGlTWTl6WmswRUdrR2w2d0pNS0tzS2F2TCJ9',
-        slug: 'rene-castillo',
-        position: 'Fundador CLIC Inmobiliaria'
-      },
-      category: { id: 'cat-4', name: 'Entrevistas', slug: 'entrevistas' }
-    },
-    {
-      id: 'vid-007',
-      title: 'Guía de Inversión Inmobiliaria en RD',
-      description: 'Todo lo que necesitas saber para invertir en bienes raíces en República Dominicana.',
-      thumbnail: 'https://images.unsplash.com/photo-1582407947304-fd86f028f716?w=800&h=450&fit=crop',
-      slug: 'guia-inversion-inmobiliaria-rd',
-      videoSlug: 'videos/consejos/guia-inversion-inmobiliaria-rd',
-      duration: '15:20',
-      publishedAt: '2024-12-20T10:00:00Z',
-      views: 2340,
-      featured: false,
-      url: `${baseUrl}/videos/consejos/guia-inversion-inmobiliaria-rd`,
-      author: {
-        name: 'René Castillo',
-        avatar: 'https://img.clerk.com/eyJ0eXBlIjoicHJveHkiLCJzcmMiOiJodHRwczovL2ltYWdlcy5jbGVyay5kZXYvdXBsb2FkZWQvaW1nXzM1dGlTWTl6WmswRUdrR2w2d0pNS0tzS2F2TCJ9',
-        slug: 'rene-castillo',
-        position: 'Fundador CLIC Inmobiliaria'
-      },
-      category: { id: 'cat-5', name: 'Consejos', slug: 'consejos' }
-    },
-    {
-      id: 'vid-008',
-      title: 'Casa de los Famosos - Episodio Especial',
-      description: 'Un recorrido especial por las casas más impresionantes de celebridades.',
-      thumbnail: 'https://images.unsplash.com/photo-1512917774080-9991f1c4c750?w=800&h=450&fit=crop',
-      slug: 'casa-famosos-episodio-especial',
-      videoSlug: 'videos/la-casa-de-los-famosos/casa-famosos-episodio-especial',
-      duration: '18:45',
-      publishedAt: '2024-12-15T12:00:00Z',
-      views: 4560,
-      featured: true,
-      url: `${baseUrl}/videos/la-casa-de-los-famosos/casa-famosos-episodio-especial`,
-      author: {
-        name: 'René Castillo',
-        avatar: 'https://img.clerk.com/eyJ0eXBlIjoicHJveHkiLCJzcmMiOiJodHRwczovL2ltYWdlcy5jbGVyay5kZXYvdXBsb2FkZWQvaW1nXzM1dGlTWTl6WmswRUdrR2w2d0pNS0tzS2F2TCJ9',
-        slug: 'rene-castillo',
-        position: 'Fundador CLIC Inmobiliaria'
-      },
-      category: { id: 'cat-6', name: 'La Casa de los Famosos', slug: 'la-casa-de-los-famosos' }
-    }
-  ];
-
-  const featuredVideos = allVideos.filter(v => v.featured);
-  const recentVideos = [...allVideos].sort((a, b) =>
-    new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()
-  );
-
-  const categories = [
-    { id: 'cat-1', name: 'Lanzamientos', slug: 'lanzamientos', url: `${baseUrl}/videos/lanzamientos`, videoCount: 1, featured: true },
-    { id: 'cat-2', name: 'Recorridos', slug: 'recorridos', url: `${baseUrl}/videos/recorridos`, videoCount: 2, featured: true },
-    { id: 'cat-3', name: 'Decoración', slug: 'decoracion', url: `${baseUrl}/videos/decoracion`, videoCount: 2, featured: false },
-    { id: 'cat-4', name: 'Entrevistas', slug: 'entrevistas', url: `${baseUrl}/videos/entrevistas`, videoCount: 1, featured: false },
-    { id: 'cat-5', name: 'Consejos', slug: 'consejos', url: `${baseUrl}/videos/consejos`, videoCount: 1, featured: true },
-    { id: 'cat-6', name: 'La Casa de los Famosos', slug: 'la-casa-de-los-famosos', url: `${baseUrl}/videos/la-casa-de-los-famosos`, videoCount: 1, featured: true }
-  ];
-
-  const totalViews = allVideos.reduce((sum, v) => sum + v.views, 0);
-
-  return {
-    type: 'videos-main',
-    language,
-    tenant,
-    seo: utils.generateSEO({
-      title: language === 'en' ? 'Videos - CLIC Real Estate' : 'Videos - CLIC Inmobiliaria',
-      description: language === 'en'
-        ? 'Discover properties, explore tours, and learn investment tips with CLIC Real Estate videos.'
-        : 'Descubre propiedades, explora recorridos y aprende tips de inversión con los videos de CLIC Inmobiliaria.',
-      language,
-      canonicalUrl: `${baseUrl}/videos`,
-      siteName: tenant.name
-    }),
-    trackingString,
-    featuredVideos,
-    recentVideos,
-    categories,
-    stats: {
-      totalVideos: allVideos.length,
-      totalCategories: categories.length,
-      totalViews
-    },
-    videos: allVideos
-  };
 }
 
 // ============================================================================

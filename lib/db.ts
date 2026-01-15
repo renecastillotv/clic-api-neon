@@ -521,6 +521,230 @@ export async function getFeaturedProperties(tenantId: string, limit: number = 12
   `;
 }
 
+// ============================================================================
+// VIDEOS - Funciones para manejar videos
+// ============================================================================
+
+// Obtener videos con filtros
+export async function getVideos(options: {
+  tenantId: string;
+  categoryId?: string;
+  page?: number;
+  limit?: number;
+  featured?: boolean;
+}) {
+  const sql = getSQL();
+  const { tenantId, categoryId, page = 1, limit = 20, featured } = options;
+  const offset = (page - 1) * limit;
+
+  // Query base para videos
+  const videos = await sql`
+    SELECT
+      v.id,
+      v.slug,
+      v.titulo,
+      v.descripcion,
+      v.tipo_video,
+      v.video_url,
+      v.video_id,
+      v.thumbnail,
+      v.duracion_segundos,
+      v.publicado,
+      v.destacado,
+      v.vistas,
+      v.orden,
+      v.tags,
+      v.traducciones,
+      v.categoria_id,
+      v.created_at,
+      v.updated_at,
+      cc.slug as categoria_slug,
+      cc.nombre as categoria_nombre
+    FROM videos v
+    LEFT JOIN categorias_contenido cc ON v.categoria_id = cc.id
+    WHERE v.tenant_id = ${tenantId}
+      AND v.publicado = true
+      AND (${categoryId}::uuid IS NULL OR v.categoria_id = ${categoryId}::uuid)
+      AND (${featured}::boolean IS NULL OR v.destacado = ${featured})
+    ORDER BY v.destacado DESC, v.orden ASC, v.created_at DESC
+    LIMIT ${limit} OFFSET ${offset}
+  `;
+
+  // Query de conteo
+  const countResult = await sql`
+    SELECT COUNT(*) as total
+    FROM videos v
+    WHERE v.tenant_id = ${tenantId}
+      AND v.publicado = true
+      AND (${categoryId}::uuid IS NULL OR v.categoria_id = ${categoryId}::uuid)
+      AND (${featured}::boolean IS NULL OR v.destacado = ${featured})
+  `;
+
+  const total = parseInt(countResult[0]?.total || '0', 10);
+
+  return {
+    videos,
+    pagination: {
+      page,
+      limit,
+      total_items: total,
+      total_pages: Math.ceil(total / limit),
+      has_next: page * limit < total,
+      has_prev: page > 1
+    }
+  };
+}
+
+// Obtener video individual por slug
+export async function getVideoBySlug(slug: string, tenantId: string) {
+  const sql = getSQL();
+  const result = await sql`
+    SELECT
+      v.*,
+      cc.slug as categoria_slug,
+      cc.nombre as categoria_nombre
+    FROM videos v
+    LEFT JOIN categorias_contenido cc ON v.categoria_id = cc.id
+    WHERE v.slug = ${slug}
+      AND v.tenant_id = ${tenantId}
+      AND v.publicado = true
+    LIMIT 1
+  `;
+  return result[0] || null;
+}
+
+// Obtener videos destacados
+export async function getFeaturedVideos(tenantId: string, limit: number = 6) {
+  const sql = getSQL();
+  return sql`
+    SELECT
+      v.id,
+      v.slug,
+      v.titulo,
+      v.descripcion,
+      v.tipo_video,
+      v.video_url,
+      v.video_id,
+      v.thumbnail,
+      v.duracion_segundos,
+      v.destacado,
+      v.vistas,
+      v.created_at,
+      v.categoria_id,
+      cc.slug as categoria_slug,
+      cc.nombre as categoria_nombre
+    FROM videos v
+    LEFT JOIN categorias_contenido cc ON v.categoria_id = cc.id
+    WHERE v.tenant_id = ${tenantId}
+      AND v.publicado = true
+      AND v.destacado = true
+    ORDER BY v.orden ASC, v.created_at DESC
+    LIMIT ${limit}
+  `;
+}
+
+// Obtener categorías de videos (tipo = 'video')
+export async function getVideoCategories(tenantId: string) {
+  const sql = getSQL();
+  return sql`
+    SELECT
+      cc.id,
+      cc.slug,
+      cc.nombre as name,
+      cc.descripcion as description,
+      cc.traducciones,
+      cc.tipo,
+      cc.orden,
+      COALESCE((
+        SELECT COUNT(*)
+        FROM videos v
+        WHERE v.categoria_id = cc.id
+          AND v.publicado = true
+          AND v.tenant_id = ${tenantId}
+      ), 0) as video_count
+    FROM categorias_contenido cc
+    WHERE cc.tenant_id = ${tenantId}
+      AND cc.activa = true
+      AND cc.tipo = 'video'
+    ORDER BY cc.orden ASC, cc.nombre ASC
+  `;
+}
+
+// Obtener categoría de video por slug
+export async function getVideoCategoryBySlug(slug: string, tenantId: string) {
+  const sql = getSQL();
+  const result = await sql`
+    SELECT
+      cc.id,
+      cc.slug,
+      cc.nombre as name,
+      cc.descripcion as description,
+      cc.traducciones,
+      cc.tipo
+    FROM categorias_contenido cc
+    WHERE cc.slug = ${slug}
+      AND cc.tenant_id = ${tenantId}
+      AND cc.activa = true
+      AND cc.tipo = 'video'
+    LIMIT 1
+  `;
+  return result[0] || null;
+}
+
+// Obtener estadísticas de videos
+export async function getVideoStats(tenantId: string) {
+  const sql = getSQL();
+  const result = await sql`
+    SELECT
+      COUNT(*) as total_videos,
+      COUNT(*) FILTER (WHERE destacado = true) as featured_count,
+      COALESCE(SUM(vistas), 0) as total_views
+    FROM videos
+    WHERE tenant_id = ${tenantId}
+      AND publicado = true
+  `;
+
+  const s = result[0] || {};
+  return {
+    totalVideos: parseInt(s.total_videos || '0', 10),
+    featuredCount: parseInt(s.featured_count || '0', 10),
+    totalViews: parseInt(s.total_views || '0', 10)
+  };
+}
+
+// Obtener videos relacionados
+export async function getRelatedVideos(tenantId: string, videoId: string, categoryId?: string, limit: number = 4) {
+  const sql = getSQL();
+  return sql`
+    SELECT
+      v.id,
+      v.slug,
+      v.titulo,
+      v.descripcion,
+      v.tipo_video,
+      v.video_url,
+      v.video_id,
+      v.thumbnail,
+      v.duracion_segundos,
+      v.vistas,
+      v.created_at,
+      v.categoria_id,
+      cc.slug as categoria_slug,
+      cc.nombre as categoria_nombre
+    FROM videos v
+    LEFT JOIN categorias_contenido cc ON v.categoria_id = cc.id
+    WHERE v.tenant_id = ${tenantId}
+      AND v.publicado = true
+      AND v.id != ${videoId}::uuid
+      AND (${categoryId}::uuid IS NULL OR v.categoria_id = ${categoryId}::uuid)
+    ORDER BY
+      CASE WHEN v.categoria_id = ${categoryId}::uuid THEN 0 ELSE 1 END,
+      v.destacado DESC,
+      v.created_at DESC
+    LIMIT ${limit}
+  `;
+}
+
 // Obtener ciudades/sectores populares
 export async function getPopularLocations(tenantId: string) {
   const sql = getSQL();
@@ -580,5 +804,13 @@ export default {
   getLocations,
   getQuickStats,
   getFeaturedProperties,
-  getPopularLocations
+  getPopularLocations,
+  // Videos
+  getVideos,
+  getVideoBySlug,
+  getFeaturedVideos,
+  getVideoCategories,
+  getVideoCategoryBySlug,
+  getVideoStats,
+  getRelatedVideos
 };
