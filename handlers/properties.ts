@@ -7,6 +7,24 @@ import utils from '../lib/utils';
 import type { TenantConfig } from '../types';
 
 // ============================================================================
+// UTILIDADES
+// ============================================================================
+
+// Formatear duración de video de segundos a "MM:SS" o "H:MM:SS"
+function formatVideoDuration(seconds: number | null | undefined): string {
+  if (!seconds || seconds <= 0) return '';
+
+  const hrs = Math.floor(seconds / 3600);
+  const mins = Math.floor((seconds % 3600) / 60);
+  const secs = Math.floor(seconds % 60);
+
+  if (hrs > 0) {
+    return `${hrs}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  }
+  return `${mins}:${secs.toString().padStart(2, '0')}`;
+}
+
+// ============================================================================
 // TIPOS COMPATIBLES CON SUPABASE
 // ============================================================================
 
@@ -370,12 +388,14 @@ export async function handleSingleProperty(options: {
       thumbnail: v.thumbnail || (v.video_id ? `https://img.youtube.com/vi/${v.video_id}/hqdefault.jpg` : ''),
       video_id: v.video_id || null,
       video_url: v.video_url || null, // Incluir video_url como alternativa
-      duration: v.duracion_segundos || 0,
+      // Formatear duración de segundos a "MM:SS" o "HH:MM:SS"
+      duration: formatVideoDuration(v.duracion_segundos),
+      views: v.vistas || 0,
       category: v.categoria_nombre || 'Video',
       category_name: v.categoria_nombre || 'Video', // Campo que espera el frontend
       category_slug: v.categoria_slug || 'general',
       url: `/videos/${v.categoria_slug || 'general'}/${v.slug}`,
-      featured: false,
+      featured: v.destacado === true || v.destacado === 1, // Usar el campo destacado de la DB
       relation_type: 'tags' // Para que el frontend los muestre como relacionados
     }));
 

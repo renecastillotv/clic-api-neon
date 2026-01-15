@@ -955,6 +955,8 @@ export async function getRecentVideos(tenantId: string, limit: number = 4) {
       v.video_id,
       v.thumbnail,
       v.duracion_segundos,
+      v.destacado,
+      v.vistas,
       v.categoria_id,
       cc.slug as categoria_slug,
       cc.nombre as categoria_nombre
@@ -962,7 +964,7 @@ export async function getRecentVideos(tenantId: string, limit: number = 4) {
     LEFT JOIN categorias_contenido cc ON v.categoria_id = cc.id
     WHERE v.tenant_id = ${tenantId}
       AND v.publicado = true
-    ORDER BY v.created_at DESC
+    ORDER BY v.destacado DESC, v.created_at DESC
     LIMIT ${limit}
   `;
   return result;
