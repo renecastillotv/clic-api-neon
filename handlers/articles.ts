@@ -302,8 +302,7 @@ async function handleArticlesMain(options: {
       LIMIT ${limit} OFFSET ${offset}
     `;
 
-    // Query: Categorías con conteo - basado en artículos existentes
-    // Busca todas las categorías que tienen artículos publicados, sin filtrar por tipo
+    // Query: TODAS las categorías de tipo 'articulo' del tenant (con o sin artículos)
     const categoriesResult = await sql`
       SELECT
         cc.id,
@@ -311,14 +310,18 @@ async function handleArticlesMain(options: {
         cc.nombre as name,
         cc.descripcion as description,
         cc.traducciones,
-        COUNT(a.id) as article_count
+        cc.tipo,
+        COALESCE((
+          SELECT COUNT(*)
+          FROM articulos a
+          WHERE a.categoria_id = cc.id
+            AND a.publicado = true
+            AND a.tenant_id = ${tenant.id}
+        ), 0) as article_count
       FROM categorias_contenido cc
-      INNER JOIN articulos a ON a.categoria_id = cc.id
-        AND a.publicado = true
-        AND a.tenant_id = ${tenant.id}
       WHERE cc.tenant_id = ${tenant.id}
         AND cc.activa = true
-      GROUP BY cc.id, cc.slug, cc.nombre, cc.descripcion, cc.traducciones, cc.orden
+        AND cc.tipo = 'articulo'
       ORDER BY cc.orden ASC, cc.nombre ASC
     `;
 
@@ -352,9 +355,8 @@ async function handleArticlesMain(options: {
       processArticle(item, language, trackingString)
     );
 
-    // Procesar categorías
+    // Procesar categorías - mostrar TODAS las categorías de tipo 'articulo'
     const categories: ArticleCategory[] = (categoriesResult as any[])
-      .filter((cat: any) => parseInt(cat.article_count || '0', 10) > 0)
       .map((cat: any) => {
         const catProcessed = utils.processTranslations(cat, language);
         return {
@@ -538,7 +540,7 @@ async function handleArticlesCategory(options: {
     ` as any[];
 
   } else {
-    // Obtener categoría normal - sin filtrar por tipo, solo verificamos que tenga artículos
+    // Obtener categoría de tipo 'articulo' por slug
     const categoryResult = await sql`
       SELECT
         cc.id,
@@ -550,12 +552,7 @@ async function handleArticlesCategory(options: {
       WHERE cc.tenant_id = ${tenant.id}
         AND cc.slug = ${categorySlug}
         AND cc.activa = true
-        AND EXISTS (
-          SELECT 1 FROM articulos a
-          WHERE a.categoria_id = cc.id
-            AND a.publicado = true
-            AND a.tenant_id = ${tenant.id}
-        )
+        AND cc.tipo = 'articulo'
       LIMIT 1
     `;
 
