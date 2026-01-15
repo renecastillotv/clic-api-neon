@@ -287,6 +287,14 @@ export async function handleSingleProperty(options: {
   // Procesar amenidades con detalles
   // El frontend espera: { amenities: { name, icon, category } } o { name, icon, category }
   const amenityDetailsArray = amenityDetails as any[];
+
+  console.log('[handleSingleProperty] Amenity names from property:', amenityNames);
+  console.log('[handleSingleProperty] Amenity details from DB:', amenityDetailsArray.map((a: any) => ({
+    nombre: a.nombre,
+    icono: a.icono,
+    categoria: a.categoria
+  })));
+
   const processedAmenities = amenityNames.map(name => {
     const detail = amenityDetailsArray.find((a: any) => a.nombre === name);
     // Las traducciones están en el campo JSONB 'traducciones'
@@ -304,6 +312,8 @@ export async function handleSingleProperty(options: {
       amenities: amenityData
     };
   });
+
+  console.log('[handleSingleProperty] Processed amenities:', processedAmenities.slice(0, 3));
 
   // Formatear propiedades similares
   const similarPropertiesArray = similarPropertiesRaw as any[];
@@ -341,19 +351,28 @@ export async function handleSingleProperty(options: {
   }));
 
   // Formatear videos recientes
+  // El frontend filtra por: video.title && video.video_id
   const recentVideosArray = recentVideos as any[];
-  const formattedVideos = recentVideosArray.map((v: any) => ({
-    id: v.id,
-    title: v.titulo,
-    slug: v.slug,
-    description: v.descripcion?.substring(0, 100) + '...' || '',
-    thumbnail: v.thumbnail || '',
-    video_id: v.video_id || '',
-    duration: v.duracion_segundos || 0,
-    category: v.categoria_nombre || '',
-    category_slug: v.categoria_slug || '',
-    url: `/videos/${v.categoria_slug || 'general'}/${v.slug}`
-  }));
+  const formattedVideos = recentVideosArray
+    .filter((v: any) => v.titulo && v.video_id) // Pre-filtrar videos válidos
+    .map((v: any) => ({
+      id: v.id,
+      title: v.titulo,
+      slug: v.slug,
+      slug_url: v.slug,
+      description: v.descripcion?.substring(0, 100) + '...' || '',
+      thumbnail: v.thumbnail || `https://img.youtube.com/vi/${v.video_id}/hqdefault.jpg`,
+      video_id: v.video_id,
+      duration: v.duracion_segundos || 0,
+      category: v.categoria_nombre || 'Video',
+      category_name: v.categoria_nombre || 'Video', // Campo que espera el frontend
+      category_slug: v.categoria_slug || 'general',
+      url: `/videos/${v.categoria_slug || 'general'}/${v.slug}`,
+      featured: false,
+      relation_type: 'tags' // Para que el frontend los muestre como relacionados
+    }));
+
+  console.log('[handleSingleProperty] Videos found:', formattedVideos.length);
 
   // Construir objeto agente
   const agent = rawProperty.agente_id ? {
