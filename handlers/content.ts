@@ -28,10 +28,16 @@ export async function handleTestimonials(options: {
   // Obtener testimonios usando la función de db.ts
   const testimonials = await db.getTestimonials(tenant.id, limit);
 
-  // Procesar testimonios
-  const processedTestimonials = testimonials.map(item => processTestimonial(item, language));
+  // Procesar testimonios para el formato que espera el frontend
+  const processedTestimonials = testimonials.map(item => processTestimonial(item, language, trackingString));
 
   const total = testimonials.length;
+
+  // Calcular estadísticas
+  const featuredCount = testimonials.filter(t => t.is_featured).length;
+  const avgRating = testimonials.length > 0
+    ? testimonials.reduce((sum, t) => sum + (parseFloat(t.rating) || 5), 0) / testimonials.length
+    : 5;
 
   // Generar SEO
   const seo = generateTestimonialsSEO(language, tenant, total);
@@ -42,8 +48,17 @@ export async function handleTestimonials(options: {
     tenant,
     seo,
     trackingString,
-    testimonials: processedTestimonials,
+    // El frontend espera 'recentTestimonials', no 'testimonials'
+    recentTestimonials: processedTestimonials,
+    testimonials: processedTestimonials, // Mantener por compatibilidad
     categories: [],
+    stats: {
+      totalTestimonials: total,
+      averageRating: Math.round(avgRating * 10) / 10,
+      totalCategories: 0,
+      totalViews: 0,
+      verifiedClients: featuredCount
+    },
     pagination: {
       page,
       limit,
@@ -114,22 +129,67 @@ export async function handleFAQs(options: {
 // FUNCIONES AUXILIARES
 // ============================================================================
 
-function processTestimonial(item: Record<string, any>, language: string): Testimonial {
+function processTestimonial(item: Record<string, any>, language: string, trackingString: string = ''): any {
+  // Extraer contenido traducido
+  const contentText = typeof item.content === 'string'
+    ? item.content
+    : item.content?.[language] || item.content?.es || '';
+
+  // Generar excerpt (primeras 150 caracteres)
+  const excerpt = contentText.length > 150
+    ? contentText.substring(0, 150) + '...'
+    : contentText;
+
+  // Generar título basado en el rating o contenido
+  const rating = parseFloat(item.rating) || 5;
+  const title = rating >= 5
+    ? (language === 'en' ? 'Excellent experience' : language === 'fr' ? 'Excellente expérience' : 'Excelente experiencia')
+    : rating >= 4
+    ? (language === 'en' ? 'Very good experience' : language === 'fr' ? 'Très bonne expérience' : 'Muy buena experiencia')
+    : (language === 'en' ? 'Good experience' : language === 'fr' ? 'Bonne expérience' : 'Buena experiencia');
+
+  // Construir URL del testimonio
+  const testimonialSlug = item.slug || `testimonio-${item.id?.substring(0, 8) || 'default'}`;
+  const basePath = language === 'es' ? '/testimonios' : language === 'en' ? '/en/testimonials' : '/fr/temoignages';
+  const url = `${basePath}/${testimonialSlug}${trackingString}`;
+
   return {
+    // Campos que espera el frontend (TestimonialsMainLayout.astro)
     id: item.id,
-    content: {
-      es: item.content,
-      en: item.content,
-      fr: item.content
+    title: title,
+    excerpt: excerpt,
+    subtitle: '',
+    rating: rating,
+    clientName: item.client_name || 'Cliente',
+    clientAvatar: item.client_photo || '',
+    clientLocation: item.client_location || '',
+    clientVerified: item.is_featured || false,
+    clientProfession: '',
+    transactionLocation: item.client_location || '',
+    category: 'general',
+    featured: item.is_featured || false,
+    publishedAt: item.created_at || new Date().toISOString(),
+    views: '0',
+    readTime: '2 min',
+    url: url,
+    slug: testimonialSlug,
+    agent: {
+      name: 'Equipo CLIC',
+      avatar: '',
+      slug: '',
+      position: 'Asesor Inmobiliario'
     },
-    rating: item.rating || 5,
+    // Campos legacy para compatibilidad
+    content: {
+      es: contentText,
+      en: contentText,
+      fr: contentText
+    },
     client_name: item.client_name,
     client_photo: item.client_photo,
     client_location: item.client_location,
-    transaction_type: undefined,
-    property_type: item.property_type,
-    status: 'approved' as const,
-    is_featured: item.is_featured || false
+    is_featured: item.is_featured || false,
+    status: 'approved' as const
   };
 }
 
