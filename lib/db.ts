@@ -872,11 +872,12 @@ export async function getRecentArticles(tenantId: string, limit: number = 4) {
   return result;
 }
 
-// Obtener detalles de amenidades por nombres
+// Obtener detalles de amenidades por nombres o códigos
 export async function getAmenityDetails(tenantId: string, amenityNames: string[]) {
   if (!amenityNames || amenityNames.length === 0) return [];
 
   const sql = getSQL();
+  // Buscar por nombre O por código (el campo amenidades en propiedades puede tener cualquiera)
   const result = await sql`
     SELECT
       id,
@@ -887,7 +888,7 @@ export async function getAmenityDetails(tenantId: string, amenityNames: string[]
       traducciones
     FROM amenidades
     WHERE tenant_id = ${tenantId}
-      AND nombre = ANY(${amenityNames})
+      AND (nombre = ANY(${amenityNames}) OR codigo = ANY(${amenityNames}))
       AND activo = true
   `;
   return result;

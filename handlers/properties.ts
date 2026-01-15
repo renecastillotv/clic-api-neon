@@ -296,13 +296,18 @@ export async function handleSingleProperty(options: {
   })));
 
   const processedAmenities = amenityNames.map(name => {
-    const detail = amenityDetailsArray.find((a: any) => a.nombre === name);
+    // Buscar por nombre O por código
+    const detail = amenityDetailsArray.find((a: any) =>
+      a.nombre === name || a.codigo === name
+    );
     // Las traducciones están en el campo JSONB 'traducciones'
     const traducciones = detail?.traducciones || {};
+    // Usar el nombre de la tabla amenidades si existe, sino el valor original
+    const displayName = detail?.nombre || name;
     const amenityData = {
-      name: name,
-      name_en: traducciones.en?.nombre || traducciones.nombre_en || name,
-      name_fr: traducciones.fr?.nombre || traducciones.nombre_fr || name,
+      name: displayName,
+      name_en: traducciones.en?.nombre || traducciones.nombre_en || displayName,
+      name_fr: traducciones.fr?.nombre || traducciones.nombre_fr || displayName,
       icon: detail?.icono || 'fas fa-check',
       category: detail?.categoria || 'General'
     };
