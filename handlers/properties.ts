@@ -449,8 +449,8 @@ function toSupabasePropertyFormat(prop: any, language: string, trackingString: s
     bedrooms: prop.habitaciones || 0,
     bathrooms: prop.banos || 0,
     parking_spots: prop.estacionamientos || prop.parking || 0,
-    built_area: prop.m2_construccion || prop.area_construida || null,
-    land_area: prop.m2_terreno || prop.area_total || null,
+    built_area: parseFloat(prop.m2_construccion) || parseFloat(prop.area_construida) || null,
+    land_area: parseFloat(prop.m2_terreno) || parseFloat(prop.area_total) || null,
     main_image_url: mainImage,
     gallery_images_url: galleryImages.join(','),
     property_status: prop.estado_propiedad || 'disponible',
@@ -504,13 +504,14 @@ function toSupabasePropertyFormat(prop: any, language: string, trackingString: s
     sector: prop.sector || prop.ciudad || 'Ubicación no especificada',
     habitaciones: prop.habitaciones || 0,
     banos: prop.banos || 0,
-    metros: prop.m2_construccion || prop.area_construida || 0,
-    metros_terreno: prop.m2_terreno || prop.area_total || 0,
+    metros: parseFloat(prop.m2_construccion) || parseFloat(prop.area_construida) || 0,
+    metros_terreno: parseFloat(prop.m2_terreno) || parseFloat(prop.area_total) || 0,
     tipo: formatPropertyType(prop.tipo, language),
     destacado: prop.destacado || prop.is_featured || false,
     nuevo: prop.nuevo || false,
     parqueos: prop.estacionamientos || prop.parking || 0,
-    url: slugUrl
+    url: slugUrl,
+    isFormattedByProvider: true
   };
 }
 
