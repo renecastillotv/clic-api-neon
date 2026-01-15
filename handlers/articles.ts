@@ -302,7 +302,8 @@ async function handleArticlesMain(options: {
       LIMIT ${limit} OFFSET ${offset}
     `;
 
-    // Query: Categorías con conteo (simplificado)
+    // Query: Categorías con conteo - basado en artículos existentes
+    // Busca todas las categorías que tienen artículos publicados, sin filtrar por tipo
     const categoriesResult = await sql`
       SELECT
         cc.id,
@@ -310,11 +311,14 @@ async function handleArticlesMain(options: {
         cc.nombre as name,
         cc.descripcion as description,
         cc.traducciones,
-        (SELECT COUNT(*) FROM articulos a WHERE a.categoria_id = cc.id AND a.publicado = true AND a.tenant_id = ${tenant.id}) as article_count
+        COUNT(a.id) as article_count
       FROM categorias_contenido cc
+      INNER JOIN articulos a ON a.categoria_id = cc.id
+        AND a.publicado = true
+        AND a.tenant_id = ${tenant.id}
       WHERE cc.tenant_id = ${tenant.id}
-        AND cc.tipo = 'articulo'
         AND cc.activa = true
+      GROUP BY cc.id, cc.slug, cc.nombre, cc.descripcion, cc.traducciones, cc.orden
       ORDER BY cc.orden ASC, cc.nombre ASC
     `;
 
@@ -361,6 +365,32 @@ async function handleArticlesMain(options: {
           articleCount: parseInt(cat.article_count || '0', 10),
         };
       });
+
+    // Verificar si hay artículos sin categoría
+    const uncategorizedResult = await sql`
+      SELECT COUNT(*) as count
+      FROM articulos
+      WHERE tenant_id = ${tenant.id}
+        AND publicado = true
+        AND categoria_id IS NULL
+    `;
+    const uncategorizedCount = parseInt((uncategorizedResult as any[])[0]?.count || '0', 10);
+
+    // Si hay artículos sin categoría, agregar categoría "General"
+    if (uncategorizedCount > 0) {
+      const generalNames: Record<string, string> = {
+        es: 'General',
+        en: 'General',
+        fr: 'Général',
+      };
+      categories.push({
+        id: 'general',
+        name: generalNames[language] || generalNames.es,
+        slug: 'general',
+        description: language === 'es' ? 'Artículos generales' : 'General articles',
+        articleCount: uncategorizedCount,
+      });
+    }
 
     // Procesar estadísticas
     const statsData = (statsResult as any[])[0] || {};
@@ -449,69 +479,136 @@ async function handleArticlesCategory(options: {
   const sql = db.getSQL();
   const offset = (page - 1) * limit;
 
-  // Obtener categoría
-  const categoryResult = await sql`
-    SELECT
-      id,
-      slug,
-      nombre as name,
-      descripcion as description,
-      traducciones
-    FROM categorias_contenido
-    WHERE tenant_id = ${tenant.id}
-      AND slug = ${categorySlug}
-      AND tipo = 'articulo'
-      AND activa = true
-    LIMIT 1
-  `;
+  let category: ArticleCategory;
+  let articlesResult: any[];
+  let totalArticles: number;
 
-  if (!categoryResult || categoryResult.length === 0) {
-    return null;
+  // Caso especial: categoría "general" para artículos sin categoría
+  if (categorySlug === 'general') {
+    // Verificar si hay artículos sin categoría
+    const countResult = await sql`
+      SELECT COUNT(*) as total
+      FROM articulos
+      WHERE tenant_id = ${tenant.id}
+        AND publicado = true
+        AND categoria_id IS NULL
+    `;
+    totalArticles = parseInt((countResult as any[])[0]?.total || '0', 10);
+
+    if (totalArticles === 0) {
+      return null;
+    }
+
+    const generalNames: Record<string, string> = {
+      es: 'General',
+      en: 'General',
+      fr: 'Général',
+    };
+
+    category = {
+      id: 'general',
+      name: generalNames[language] || generalNames.es,
+      slug: 'general',
+      description: language === 'es' ? 'Artículos generales' : 'General articles',
+    };
+
+    // Query: Artículos sin categoría
+    articlesResult = await sql`
+      SELECT
+        a.id,
+        a.slug,
+        a.titulo,
+        a.extracto,
+        a.imagen_principal,
+        a.fecha_publicacion,
+        a.vistas,
+        a.destacado,
+        a.traducciones,
+        a.categoria_id,
+        a.autor_nombre,
+        a.autor_foto,
+        'general' as categoria_slug,
+        ${category.name} as categoria_nombre
+      FROM articulos a
+      WHERE a.tenant_id = ${tenant.id}
+        AND a.publicado = true
+        AND a.categoria_id IS NULL
+      ORDER BY a.destacado DESC, a.fecha_publicacion DESC NULLS LAST
+      LIMIT ${limit} OFFSET ${offset}
+    ` as any[];
+
+  } else {
+    // Obtener categoría normal - sin filtrar por tipo, solo verificamos que tenga artículos
+    const categoryResult = await sql`
+      SELECT
+        cc.id,
+        cc.slug,
+        cc.nombre as name,
+        cc.descripcion as description,
+        cc.traducciones
+      FROM categorias_contenido cc
+      WHERE cc.tenant_id = ${tenant.id}
+        AND cc.slug = ${categorySlug}
+        AND cc.activa = true
+        AND EXISTS (
+          SELECT 1 FROM articulos a
+          WHERE a.categoria_id = cc.id
+            AND a.publicado = true
+            AND a.tenant_id = ${tenant.id}
+        )
+      LIMIT 1
+    `;
+
+    const categoryResultArray = categoryResult as any[];
+    if (!categoryResultArray || categoryResultArray.length === 0) {
+      return null;
+    }
+
+    const categoryData = categoryResultArray[0];
+    const categoryProcessed = utils.processTranslations(categoryData, language);
+
+    category = {
+      id: categoryData.id,
+      name: utils.getTranslatedField(categoryProcessed, 'name', language) || categoryData.name,
+      slug: categoryData.slug,
+      description: utils.getTranslatedField(categoryProcessed, 'description', language) || categoryData.description,
+    };
+
+    // Query: Artículos de la categoría
+    articlesResult = await sql`
+      SELECT
+        a.id,
+        a.slug,
+        a.titulo,
+        a.extracto,
+        a.imagen_principal,
+        a.fecha_publicacion,
+        a.vistas,
+        a.destacado,
+        a.traducciones,
+        a.categoria_id,
+        a.autor_nombre,
+        a.autor_foto,
+        ${categoryData.slug} as categoria_slug,
+        ${categoryData.name} as categoria_nombre
+      FROM articulos a
+      WHERE a.tenant_id = ${tenant.id}
+        AND a.categoria_id = ${categoryData.id}
+        AND a.publicado = true
+      ORDER BY a.destacado DESC, a.fecha_publicacion DESC NULLS LAST
+      LIMIT ${limit} OFFSET ${offset}
+    ` as any[];
+
+    // Query: Total
+    const countResult = await sql`
+      SELECT COUNT(*) as total
+      FROM articulos
+      WHERE tenant_id = ${tenant.id}
+        AND categoria_id = ${categoryData.id}
+        AND publicado = true
+    `;
+    totalArticles = parseInt((countResult as any[])[0]?.total || '0', 10);
   }
-
-  const categoryData = categoryResult[0] as any;
-  const categoryProcessed = utils.processTranslations(categoryData, language);
-
-  const category: ArticleCategory = {
-    id: categoryData.id,
-    name: utils.getTranslatedField(categoryProcessed, 'name', language) || categoryData.name,
-    slug: categoryData.slug,
-    description: utils.getTranslatedField(categoryProcessed, 'description', language) || categoryData.description,
-  };
-
-  // Query: Artículos de la categoría
-  const articlesResult = await sql`
-    SELECT
-      a.id,
-      a.slug,
-      a.titulo,
-      a.extracto,
-      a.imagen_principal,
-      a.fecha_publicacion,
-      a.vistas,
-      a.destacado,
-      a.traducciones,
-      a.categoria_id,
-      a.autor_nombre,
-      a.autor_foto,
-      ${categoryData.slug} as categoria_slug,
-      ${categoryData.name} as categoria_nombre
-    FROM articulos a
-    WHERE a.tenant_id = ${tenant.id}
-      AND a.categoria_id = ${categoryData.id}
-      AND a.publicado = true
-    ORDER BY a.destacado DESC, a.fecha_publicacion DESC NULLS LAST
-    LIMIT ${limit} OFFSET ${offset}
-  `;
-
-  // Query: Total
-  const countResult = await sql`
-    SELECT COUNT(*) as total
-    FROM articulos
-    WHERE tenant_id = ${tenant.id}
-      AND categoria_id = ${categoryData.id}
-      AND publicado = true
-  `;
 
   // Procesar artículos
   const articles = (articlesResult as any[]).map((item: any) =>
@@ -519,7 +616,6 @@ async function handleArticlesCategory(options: {
   );
 
   // Paginación
-  const totalArticles = parseInt((countResult as any[])[0]?.total || '0', 10);
   const totalPages = Math.ceil(totalArticles / limit);
 
   const pagination = {
