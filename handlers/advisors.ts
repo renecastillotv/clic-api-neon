@@ -173,8 +173,6 @@ export async function handleSingleAdvisor(options: {
         p.precio_venta,
         p.precio_alquiler,
         p.moneda,
-        p.moneda_venta,
-        p.moneda_alquiler,
         p.ciudad,
         p.sector,
         p.provincia,
@@ -239,7 +237,8 @@ export async function handleSingleAdvisor(options: {
 
 function toPropertyCard(prop: any, language: string, trackingString: string): any {
   const price = prop.precio_venta || prop.precio_alquiler || prop.precio || 0;
-  const currency = prop.moneda_venta || prop.moneda_alquiler || prop.moneda || 'USD';
+  // Usar moneda única del schema (no hay moneda_venta/moneda_alquiler separadas)
+  const currency = prop.moneda || 'USD';
   const operationType = prop.operacion || (prop.precio_venta ? 'sale' : 'rental');
   const propertyUrl = utils.buildPropertyUrl(prop, language, trackingString);
 

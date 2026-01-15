@@ -185,7 +185,8 @@ export async function handleHomepage(options: {
 function toSupabasePropertyFormat(prop: any, language: string, trackingString: string): any {
   const salePrice = prop.precio_venta ? parseFloat(prop.precio_venta) : null;
   const rentalPrice = prop.precio_alquiler ? parseFloat(prop.precio_alquiler) : null;
-  const currency = prop.moneda_venta || prop.moneda_alquiler || prop.moneda || 'USD';
+  // Usar moneda única del schema (no hay moneda_venta/moneda_alquiler separadas)
+  const currency = prop.moneda || 'USD';
   const operationType = salePrice ? 'venta' : 'alquiler';
   const displayPrice = salePrice || rentalPrice || 0;
 
@@ -199,15 +200,15 @@ function toSupabasePropertyFormat(prop: any, language: string, trackingString: s
     ...(salePrice && {
       sale: {
         price: salePrice,
-        currency: prop.moneda_venta || currency,
-        formatted: utils.formatPrice(salePrice, prop.moneda_venta || currency, 'venta', language)
+        currency: currency,
+        formatted: utils.formatPrice(salePrice, currency, 'venta', language)
       }
     }),
     ...(rentalPrice && {
       rental: {
         price: rentalPrice,
-        currency: prop.moneda_alquiler || currency,
-        formatted: utils.formatPrice(rentalPrice, prop.moneda_alquiler || currency, 'alquiler', language)
+        currency: currency,
+        formatted: utils.formatPrice(rentalPrice, currency, 'alquiler', language)
       }
     })
   };
@@ -234,9 +235,9 @@ function toSupabasePropertyFormat(prop: any, language: string, trackingString: s
     agent_id: prop.agente_id || prop.perfil_asesor_id,
     slug_url: slugUrl,
     sale_price: salePrice,
-    sale_currency: prop.moneda_venta || currency,
+    sale_currency: currency,
     rental_price: rentalPrice,
-    rental_currency: prop.moneda_alquiler || currency,
+    rental_currency: currency,
     temp_rental_price: null,
     temp_rental_currency: currency,
     furnished_rental_price: null,

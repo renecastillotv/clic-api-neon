@@ -127,13 +127,16 @@ export function formatPrice(
 }
 
 export function buildPriceDisplay(property: Record<string, any>, language: string): PropertyPrice {
+  // Usar moneda única del schema (no hay moneda_venta/moneda_alquiler separadas)
+  const currency = property.moneda || 'USD';
+
   // Prioridad: venta > alquiler > alquiler temporal > amueblado
   if (property.precio_venta && property.precio_venta > 0) {
     return {
       type: 'sale',
       amount: property.precio_venta,
-      currency: property.moneda_venta || 'USD',
-      display: formatPrice(property.precio_venta, property.moneda_venta || 'USD', 'sale', language)
+      currency: currency,
+      display: formatPrice(property.precio_venta, currency, 'sale', language)
     };
   }
 
@@ -141,8 +144,8 @@ export function buildPriceDisplay(property: Record<string, any>, language: strin
     return {
       type: 'rental',
       amount: property.precio_alquiler,
-      currency: property.moneda_alquiler || 'USD',
-      display: formatPrice(property.precio_alquiler, property.moneda_alquiler || 'USD', 'rental', language)
+      currency: currency,
+      display: formatPrice(property.precio_alquiler, currency, 'rental', language)
     };
   }
 
@@ -150,8 +153,8 @@ export function buildPriceDisplay(property: Record<string, any>, language: strin
     return {
       type: 'temp_rental',
       amount: property.precio_alquiler_temporal,
-      currency: property.moneda_alquiler_temporal || 'USD',
-      display: formatPrice(property.precio_alquiler_temporal, property.moneda_alquiler_temporal || 'USD', 'temp_rental', language)
+      currency: currency,
+      display: formatPrice(property.precio_alquiler_temporal, currency, 'temp_rental', language)
     };
   }
 
@@ -159,8 +162,8 @@ export function buildPriceDisplay(property: Record<string, any>, language: strin
     return {
       type: 'furnished_rental',
       amount: property.precio_alquiler_amueblado,
-      currency: property.moneda_alquiler_amueblado || 'USD',
-      display: formatPrice(property.precio_alquiler_amueblado, property.moneda_alquiler_amueblado || 'USD', 'furnished_rental', language)
+      currency: currency,
+      display: formatPrice(property.precio_alquiler_amueblado, currency, 'furnished_rental', language)
     };
   }
 

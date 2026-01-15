@@ -303,7 +303,7 @@ export async function handleSingleProperty(options: {
   const similarPropertiesArray = similarPropertiesRaw as any[];
   const similarProperties = similarPropertiesArray.map((p: any) => {
     const price = p.precio_venta || p.precio_alquiler || 0;
-    const currency = p.moneda_venta || p.moneda_alquiler || 'USD';
+    const currency = p.moneda || 'USD';
     return {
       id: p.id,
       title: p.titulo,
@@ -472,7 +472,8 @@ function toSupabasePropertyFormat(prop: any, language: string, trackingString: s
   const tempRentalPrice = prop.precio_alquiler_temporal ? parseFloat(prop.precio_alquiler_temporal) : null;
   const furnishedRentalPrice = prop.precio_alquiler_amueblado ? parseFloat(prop.precio_alquiler_amueblado) : null;
 
-  const currency = prop.moneda_venta || prop.moneda_alquiler || prop.moneda || 'USD';
+  // Usar moneda única del schema (no hay moneda_venta/moneda_alquiler separadas)
+  const currency = prop.moneda || 'USD';
   const operationType = salePrice ? 'venta' : 'alquiler';
   const displayPrice = salePrice || rentalPrice || tempRentalPrice || furnishedRentalPrice || 0;
 
@@ -489,16 +490,16 @@ function toSupabasePropertyFormat(prop: any, language: string, trackingString: s
   if (salePrice) {
     pricingUnified.sale = {
       price: salePrice,
-      currency: prop.moneda_venta || currency,
-      formatted: utils.formatPrice(salePrice, prop.moneda_venta || currency, 'venta', language)
+      currency: currency,
+      formatted: utils.formatPrice(salePrice, currency, 'venta', language)
     };
   }
 
   if (rentalPrice) {
     pricingUnified.rental = {
       price: rentalPrice,
-      currency: prop.moneda_alquiler || currency,
-      formatted: utils.formatPrice(rentalPrice, prop.moneda_alquiler || currency, 'alquiler', language)
+      currency: currency,
+      formatted: utils.formatPrice(rentalPrice, currency, 'alquiler', language)
     };
   }
 
@@ -537,13 +538,13 @@ function toSupabasePropertyFormat(prop: any, language: string, trackingString: s
     agent_id: prop.agente_id || prop.perfil_asesor_id,
     slug_url: slugUrl,
     sale_price: salePrice,
-    sale_currency: prop.moneda_venta || currency,
+    sale_currency: currency,
     rental_price: rentalPrice,
-    rental_currency: prop.moneda_alquiler || currency,
+    rental_currency: currency,
     temp_rental_price: tempRentalPrice,
-    temp_rental_currency: prop.moneda_alquiler_temporal || currency,
+    temp_rental_currency: currency,
     furnished_rental_price: furnishedRentalPrice,
-    furnished_rental_currency: prop.moneda_alquiler_amueblado || currency,
+    furnished_rental_currency: currency,
     bedrooms: bedroomsCount,
     bathrooms: bathroomsCount,
     parking_spots: prop.estacionamientos || prop.parking || 0,
@@ -949,9 +950,10 @@ function generateListSEO(filters: Record<string, any>, language: string, tenant:
 function generatePropertySEO(prop: any, language: string, tenant: TenantConfig): any {
   const title = prop.titulo || 'Propiedad';
   const location = [prop.sector, prop.ciudad].filter(Boolean).join(', ');
+  const currency = prop.moneda || 'USD';
   const price = utils.formatPrice(
     prop.precio_venta || prop.precio_alquiler || 0,
-    prop.moneda_venta || prop.moneda_alquiler || 'USD',
+    currency,
     prop.precio_venta ? 'venta' : 'alquiler',
     language
   );
@@ -978,7 +980,7 @@ function generatePropertySEO(prop: any, language: string, tenant: TenantConfig):
       name: title,
       description,
       price: prop.precio_venta || prop.precio_alquiler,
-      priceCurrency: prop.moneda_venta || prop.moneda_alquiler || 'USD'
+      priceCurrency: currency
     }
   };
 }
