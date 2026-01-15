@@ -272,7 +272,6 @@ export async function getPropertyBySlug(slug: string, tenantId: string) {
       u.apellido as agente_apellido,
       u.email as agente_email,
       u.telefono as agente_telefono,
-      u.avatar as agente_avatar,
       u.slug as agente_slug
     FROM propiedades p
     LEFT JOIN usuarios u ON p.agente_id = u.id
