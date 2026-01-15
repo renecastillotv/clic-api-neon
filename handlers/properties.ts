@@ -426,9 +426,14 @@ function toSupabasePropertyFormat(prop: any, language: string, trackingString: s
   // Construir URL en formato Supabase
   const slugUrl = buildPropertySlugUrl(prop, language);
 
+  // Código público de referencia (usar codigo_publico si existe, sino codigo, sino generar uno)
+  const publicCode = prop.codigo_publico
+    ? String(prop.codigo_publico)
+    : (prop.codigo || `P-${String(prop.id).substring(0, 6).toUpperCase()}`);
+
   return {
     id: prop.id,
-    code: prop.codigo || prop.id,
+    code: publicCode,
     name: prop.titulo || 'Propiedad sin nombre',
     description: prop.descripcion || prop.short_description || '',
     agent_id: prop.agente_id || prop.perfil_asesor_id,
@@ -904,7 +909,7 @@ async function getSimilarProperties(
 
   const similar = await sql`
     SELECT
-      p.id, p.slug, p.codigo, p.titulo, p.tipo, p.operacion,
+      p.id, p.slug, p.codigo, p.codigo_publico, p.titulo, p.tipo, p.operacion,
       p.precio, p.precio_venta, p.precio_alquiler, p.moneda,
       p.ciudad, p.sector, p.direccion, p.habitaciones, p.banos,
       p.estacionamientos, p.m2_construccion, p.m2_terreno,
@@ -943,7 +948,7 @@ async function getAgentProperties(
 
   const properties = await sql`
     SELECT
-      p.id, p.slug, p.codigo, p.titulo, p.tipo, p.operacion,
+      p.id, p.slug, p.codigo, p.codigo_publico, p.titulo, p.tipo, p.operacion,
       p.precio, p.precio_venta, p.precio_alquiler, p.moneda,
       p.ciudad, p.sector, p.direccion, p.habitaciones, p.banos,
       p.estacionamientos, p.m2_construccion, p.m2_terreno,

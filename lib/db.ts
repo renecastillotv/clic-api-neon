@@ -175,6 +175,7 @@ export async function getProperties(options: {
       p.id,
       p.slug,
       p.codigo,
+      p.codigo_publico,
       p.titulo,
       p.descripcion,
       p.short_description,
