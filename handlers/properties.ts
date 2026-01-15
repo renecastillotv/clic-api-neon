@@ -285,17 +285,23 @@ export async function handleSingleProperty(options: {
   const testimonials = testimonialsRaw as any[];
 
   // Procesar amenidades con detalles
+  // El frontend espera: { amenities: { name, icon, category } } o { name, icon, category }
   const amenityDetailsArray = amenityDetails as any[];
   const processedAmenities = amenityNames.map(name => {
     const detail = amenityDetailsArray.find((a: any) => a.nombre === name);
     // Las traducciones están en el campo JSONB 'traducciones'
     const traducciones = detail?.traducciones || {};
-    return {
+    const amenityData = {
       name: name,
       name_en: traducciones.en?.nombre || traducciones.nombre_en || name,
       name_fr: traducciones.fr?.nombre || traducciones.nombre_fr || name,
       icon: detail?.icono || 'fas fa-check',
       category: detail?.categoria || 'General'
+    };
+    // Enviar en ambos formatos para compatibilidad
+    return {
+      ...amenityData,
+      amenities: amenityData
     };
   });
 
@@ -380,11 +386,17 @@ export async function handleSingleProperty(options: {
   // Construir location con coordenadas
   const location = buildLocationData(rawProperty);
 
+  // Agregar property_amenities al objeto property para que el frontend lo encuentre
+  const propertyWithAmenities = {
+    ...property,
+    property_amenities: processedAmenities
+  };
+
   // Respuesta en formato Supabase
   return {
     type: rawProperty.is_project ? 'single-property-project' : 'single-property',
     available: rawProperty.estado_propiedad === 'disponible',
-    property,
+    property: propertyWithAmenities,
     location,
     projectDetails: rawProperty.is_project ? buildProjectDetails(rawProperty) : null,
     agent,
@@ -556,7 +568,10 @@ function toSupabasePropertyFormat(prop: any, language: string, trackingString: s
     is_project: prop.is_project || false,
     delivery_date: prop.fecha_entrega || null,
     project_detail_id: prop.proyecto_id || null,
-    exact_coordinates: prop.coordenadas || null,
+    // Coordenadas en formato string "(lat,lng)" para el frontend
+    exact_coordinates: (prop.latitud && prop.longitud)
+      ? `(${prop.latitud},${prop.longitud})`
+      : prop.coordenadas || null,
     show_exact_location: prop.mostrar_ubicacion_exacta || false,
     property_categories: {
       name: propertyType,
