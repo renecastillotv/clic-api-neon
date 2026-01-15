@@ -877,8 +877,9 @@ export async function getAmenityDetails(tenantId: string, amenityNames: string[]
   if (!amenityNames || amenityNames.length === 0) return [];
 
   const sql = getSQL();
-  // Buscar por nombre O por código (el campo amenidades en propiedades puede tener cualquiera)
-  const result = await sql`
+  // Buscar por nombre O por código - primero intenta con tenant_id, si no hay resultados busca globalmente
+  // Las amenidades pueden ser globales (sin tenant_id) o específicas del tenant
+  let result = await sql`
     SELECT
       id,
       codigo,
@@ -890,7 +891,24 @@ export async function getAmenityDetails(tenantId: string, amenityNames: string[]
     WHERE tenant_id = ${tenantId}
       AND (nombre = ANY(${amenityNames}) OR codigo = ANY(${amenityNames}))
       AND activo = true
-  `;
+  ` as Record<string, any>[];
+
+  // Si no hay resultados con tenant_id, buscar sin filtro de tenant (amenidades globales)
+  if (result.length === 0) {
+    result = await sql`
+      SELECT
+        id,
+        codigo,
+        nombre,
+        icono,
+        categoria,
+        traducciones
+      FROM amenidades
+      WHERE (nombre = ANY(${amenityNames}) OR codigo = ANY(${amenityNames}))
+        AND activo = true
+    ` as Record<string, any>[];
+  }
+
   return result;
 }
 

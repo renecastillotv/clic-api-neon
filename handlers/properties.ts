@@ -356,18 +356,20 @@ export async function handleSingleProperty(options: {
   }));
 
   // Formatear videos recientes
-  // El frontend filtra por: video.title && video.video_id
+  // El frontend requiere video.title - video_id es opcional (algunos videos no lo tienen)
   const recentVideosArray = recentVideos as any[];
   const formattedVideos = recentVideosArray
-    .filter((v: any) => v.titulo && v.video_id) // Pre-filtrar videos válidos
+    .filter((v: any) => v.titulo) // Solo requerir título, video_id es opcional
     .map((v: any) => ({
       id: v.id,
       title: v.titulo,
       slug: v.slug,
       slug_url: v.slug,
       description: v.descripcion?.substring(0, 100) + '...' || '',
-      thumbnail: v.thumbnail || `https://img.youtube.com/vi/${v.video_id}/hqdefault.jpg`,
-      video_id: v.video_id,
+      // Si tiene video_id usar thumbnail de YouTube, sino usar el thumbnail guardado o placeholder
+      thumbnail: v.thumbnail || (v.video_id ? `https://img.youtube.com/vi/${v.video_id}/hqdefault.jpg` : ''),
+      video_id: v.video_id || null,
+      video_url: v.video_url || null, // Incluir video_url como alternativa
       duration: v.duracion_segundos || 0,
       category: v.categoria_nombre || 'Video',
       category_name: v.categoria_nombre || 'Video', // Campo que espera el frontend
