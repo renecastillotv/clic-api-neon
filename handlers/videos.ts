@@ -280,27 +280,7 @@ async function handleVideosMain(options: {
   const sql = db.getSQL();
   const offset = (page - 1) * limit;
 
-  console.log('[Videos Handler] tenant.id:', tenant.id);
-  console.log('[Videos Handler] tenant.id type:', typeof tenant.id);
-
-  // Debug: almacenar información para incluir en respuesta si hay error
-  let debugInfo: any = { tenantId: tenant.id, tenantIdType: typeof tenant.id };
-
   try {
-    // Query simple para debug - contar todos los videos del tenant (sin filtros)
-    const debugCount = await sql`
-      SELECT COUNT(*) as total FROM videos WHERE tenant_id = ${tenant.id}::uuid
-    `;
-    debugInfo.totalVideosRaw = debugCount;
-    console.log('[Videos Handler] Total videos in DB for tenant (sin filtros):', JSON.stringify(debugCount));
-
-    // Query debug con filtro publicado
-    const debugPublished = await sql`
-      SELECT COUNT(*) as total FROM videos WHERE tenant_id = ${tenant.id}::uuid AND publicado = true
-    `;
-    debugInfo.totalPublishedRaw = debugPublished;
-    console.log('[Videos Handler] Total videos publicados:', JSON.stringify(debugPublished));
-
     // Query: Video destacado principal (hero)
     const heroResult = await sql`
       SELECT
@@ -541,8 +521,7 @@ async function handleVideosMain(options: {
       hasPrev: page > 1,
     };
 
-    // Incluir debug info si no hay videos
-    const result: any = {
+    return {
       type: 'videos-main',
       language,
       tenant,
@@ -555,16 +534,8 @@ async function handleVideosMain(options: {
       stats,
       pagination,
     };
-
-    // Debug: si no hay videos, incluir info de debug
-    if (stats.totalVideos === 0) {
-      result._debug = debugInfo;
-    }
-
-    return result;
   } catch (error) {
     console.error('[Videos Main Handler] Error:', error);
-    console.error('[Videos Main Handler] Error stack:', error instanceof Error ? error.stack : 'no stack');
     return {
       type: 'videos-main',
       language,
@@ -588,11 +559,6 @@ async function handleVideosMain(options: {
         totalPages: 1,
         hasNext: false,
         hasPrev: false,
-      },
-      _debug: {
-        ...debugInfo,
-        error: error instanceof Error ? error.message : String(error),
-        errorStack: error instanceof Error ? error.stack : undefined,
       },
     };
   }
