@@ -281,19 +281,25 @@ async function handleVideosMain(options: {
   const offset = (page - 1) * limit;
 
   console.log('[Videos Handler] tenant.id:', tenant.id);
+  console.log('[Videos Handler] tenant.id type:', typeof tenant.id);
+
+  // Debug: almacenar información para incluir en respuesta si hay error
+  let debugInfo: any = { tenantId: tenant.id, tenantIdType: typeof tenant.id };
 
   try {
     // Query simple para debug - contar todos los videos del tenant (sin filtros)
     const debugCount = await sql`
       SELECT COUNT(*) as total FROM videos WHERE tenant_id = ${tenant.id}::uuid
     `;
-    console.log('[Videos Handler] Total videos in DB for tenant (sin filtros):', debugCount);
+    debugInfo.totalVideosRaw = debugCount;
+    console.log('[Videos Handler] Total videos in DB for tenant (sin filtros):', JSON.stringify(debugCount));
 
     // Query debug con filtro publicado
     const debugPublished = await sql`
       SELECT COUNT(*) as total FROM videos WHERE tenant_id = ${tenant.id}::uuid AND publicado = true
     `;
-    console.log('[Videos Handler] Total videos publicados:', debugPublished);
+    debugInfo.totalPublishedRaw = debugPublished;
+    console.log('[Videos Handler] Total videos publicados:', JSON.stringify(debugPublished));
 
     // Query: Video destacado principal (hero)
     const heroResult = await sql`
@@ -502,7 +508,8 @@ async function handleVideosMain(options: {
       hasPrev: page > 1,
     };
 
-    return {
+    // Incluir debug info si no hay videos
+    const result: any = {
       type: 'videos-main',
       language,
       tenant,
@@ -515,8 +522,16 @@ async function handleVideosMain(options: {
       stats,
       pagination,
     };
+
+    // Debug: si no hay videos, incluir info de debug
+    if (stats.totalVideos === 0) {
+      result._debug = debugInfo;
+    }
+
+    return result;
   } catch (error) {
     console.error('[Videos Main Handler] Error:', error);
+    console.error('[Videos Main Handler] Error stack:', error instanceof Error ? error.stack : 'no stack');
     return {
       type: 'videos-main',
       language,
@@ -540,6 +555,11 @@ async function handleVideosMain(options: {
         totalPages: 1,
         hasNext: false,
         hasPrev: false,
+      },
+      _debug: {
+        ...debugInfo,
+        error: error instanceof Error ? error.message : String(error),
+        errorStack: error instanceof Error ? error.stack : undefined,
       },
     };
   }
