@@ -1230,7 +1230,7 @@ async function getAgentProperties(
       p.precio, p.precio_venta, p.precio_alquiler, p.moneda,
       p.ciudad, p.sector, p.direccion, p.habitaciones, p.banos,
       p.estacionamientos, p.m2_construccion, p.m2_terreno,
-      p.imagen_principal, p.destacado, p.created_at, p.is_project,
+      p.imagen_principal, p.destacada, p.created_at, p.is_project,
       p.estado_propiedad
     FROM propiedades p
     WHERE p.tenant_id = ${tenantId}
@@ -1241,7 +1241,7 @@ async function getAgentProperties(
         p.captador_id = ${captadorId}::uuid
         OR p.cocaptadores_ids @> ${JSON.stringify([captadorId])}::jsonb
       )
-    ORDER BY p.destacado DESC, p.created_at DESC
+    ORDER BY p.destacada DESC, p.created_at DESC
     LIMIT 6
   `;
 
