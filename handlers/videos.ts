@@ -280,7 +280,15 @@ async function handleVideosMain(options: {
   const sql = db.getSQL();
   const offset = (page - 1) * limit;
 
+  console.log('[Videos Handler] tenant.id:', tenant.id);
+
   try {
+    // Query simple para debug - contar todos los videos del tenant
+    const debugCount = await sql`
+      SELECT COUNT(*) as total FROM videos WHERE tenant_id = ${tenant.id}
+    `;
+    console.log('[Videos Handler] Total videos in DB for tenant:', debugCount);
+
     // Query: Video destacado principal (hero)
     const heroResult = await sql`
       SELECT
