@@ -416,9 +416,12 @@ export async function handleSingleProperty(options: {
 
   console.log('[handleSingleProperty] Videos found:', formattedVideos.length);
 
-  // Construir objeto agente (captador principal)
-  // Usar captador_id que ahora viene con datos de usuarios y perfiles_asesor
-  const agent = captadorId ? {
+  // Extraer redes sociales del JSONB
+  const socialNetworks = rawProperty.agente_redes_sociales || {};
+
+  // Construir objeto agente MAIN (captador principal)
+  // Estructura esperada por el frontend: agent.main
+  const agentMain = captadorId ? {
     id: captadorId,
     user_id: rawProperty.captador_usuario_id || captadorId,
     profile_id: rawProperty.perfil_asesor_id || null,
@@ -440,29 +443,52 @@ export async function handleSingleProperty(options: {
     languages: rawProperty.agente_idiomas || ['Español'],
     biography: rawProperty.agente_biografia || '',
     slug: rawProperty.agente_slug || '',
-    social: rawProperty.agente_redes_sociales || {},
+    url: rawProperty.agente_slug ? `/asesores/${rawProperty.agente_slug}` : null,
+    // Redes sociales individuales para el frontend
+    facebook_url: socialNetworks.facebook || null,
+    instagram_url: socialNetworks.instagram || null,
+    linkedin_url: socialNetworks.linkedin || null,
+    twitter_url: socialNetworks.twitter || null,
+    youtube_url: socialNetworks.youtube || null,
+    whatsapp_url: rawProperty.agente_whatsapp ? `https://wa.me/${rawProperty.agente_whatsapp.replace(/[^\d]/g, '')}` : null,
+    social: socialNetworks,
     active: true,
     show_on_website: true
   } : null;
 
-  // Formatear cocaptadores
+  // Formatear cocaptadores - Estructura esperada por el frontend
   const cocaptadoresArray = cocaptadoresData as any[];
-  const cocaptadores = cocaptadoresArray.map((c: any) => ({
+  const formattedCocaptores = cocaptadoresArray.map((c: any, index: number) => ({
     id: c.usuario_id,
     profile_id: c.perfil_id || null,
-    name: `${c.nombre || ''} ${c.apellido || ''}`.trim() || 'Asesor',
     first_name: c.nombre || '',
     last_name: c.apellido || '',
+    full_name: `${c.nombre || ''} ${c.apellido || ''}`.trim() || 'Asesor',
+    name: `${c.nombre || ''} ${c.apellido || ''}`.trim() || 'Asesor',
     phone: c.telefono_directo || c.telefono || '',
     whatsapp: c.whatsapp || c.telefono || '',
     email: c.email || '',
     position: c.titulo_profesional || 'Asesor Inmobiliario',
+    position_display: c.titulo_profesional || 'Asesor Inmobiliario',
+    role: 'Cocaptador',
+    order_priority: index + 1,
     profile_photo_url: c.foto_url || c.avatar_url || '',
     image: c.foto_url || c.avatar_url || '',
     years_experience: c.experiencia_anos || 0,
     biography: c.biografia || '',
-    slug: c.slug || ''
+    slug: c.slug || '',
+    url: c.slug ? `/asesores/${c.slug}` : null
   }));
+
+  // Construir estructura agent completa como espera el frontend
+  const agent = {
+    main: agentMain,
+    cocaptors: formattedCocaptores,
+    cocaptors_count: formattedCocaptores.length,
+    source: 'captador',
+    should_show_properties: agentProperties.length > 0,
+    properties_count: agentProperties.length
+  };
 
   // Generar breadcrumbs para propiedad individual
   const breadcrumbs = generatePropertyBreadcrumbs(rawProperty, language);
@@ -486,12 +512,10 @@ export async function handleSingleProperty(options: {
     property: propertyWithAmenities,
     location,
     projectDetails: rawProperty.is_project ? buildProjectDetails(rawProperty) : null,
-    // Agente captador principal
+    // Agente con estructura completa (main + cocaptors) como espera el frontend
     agent,
-    referralAgent: agent,
-    // Cocaptadores (agentes adicionales que participaron en la captación)
-    coAgents: cocaptadores,
-    cocaptadores: cocaptadores,
+    // También enviar referralAgent apuntando al main para compatibilidad
+    referralAgent: agentMain,
     agentProperties: agentProperties.map(p => ({
       id: p.id,
       title: p.name,
