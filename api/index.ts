@@ -502,11 +502,25 @@ function parseRoute(pathname: string): {
   const routeType = routes[firstSegment];
 
   if (routeType) {
+    // Si es property-list y tiene más de 3 segmentos (comprar/tipo/ciudad/sector/slug),
+    // verificar si el último segmento parece ser un slug de propiedad
+    if (routeType === 'property-list' && segments.length > 3) {
+      const lastSegment = segments[segments.length - 1];
+      if (looksLikePropertySlug(lastSegment)) {
+        return {
+          language,
+          segments,
+          routeType: 'single-property',
+          isPropertySlug: true,
+        };
+      }
+    }
+
     return {
       language,
       segments,
       routeType,
-      isPropertySlug: routeType === 'property-list' && segments.length > 2,
+      isPropertySlug: false,
     };
   }
 
@@ -535,20 +549,52 @@ function parseRoute(pathname: string): {
 }
 
 function looksLikePropertySlug(slug: string): boolean {
-  // Los slugs de propiedad suelen tener números o ser más largos
-  // y no coincidir con categorías o ubicaciones comunes
-  const commonSlugs = ['apartamento', 'casa', 'villa', 'penthouse', 'local', 'oficina', 'terreno'];
-  if (commonSlugs.includes(slug.toLowerCase())) {
+  // Los slugs de propiedad suelen tener números, ser más largos,
+  // o contener patrones específicos de propiedades
+  const slugLower = slug.toLowerCase();
+
+  // Categorías y ubicaciones comunes que NO son slugs de propiedad
+  const commonSlugs = [
+    // Categorías
+    'apartamento', 'apartamentos', 'casa', 'casas', 'villa', 'villas',
+    'penthouse', 'local', 'locales', 'oficina', 'oficinas', 'terreno', 'terrenos',
+    // Ciudades comunes de RD
+    'santo-domingo', 'santiago', 'punta-cana', 'bavaro', 'la-romana',
+    'puerto-plata', 'samana', 'sosua', 'cabarete', 'las-terrenas',
+    'distrito-nacional', 'santo-domingo-norte', 'santo-domingo-este',
+    // Sectores comunes
+    'naco', 'piantini', 'bella-vista', 'evaristo-morales', 'gazcue',
+    'los-cacicazgos', 'ensanche-serralles', 'la-julia', 'paraiso',
+  ];
+
+  if (commonSlugs.includes(slugLower)) {
     return false;
   }
+
   // Si tiene números, probablemente es una propiedad
   if (/\d/.test(slug)) {
     return true;
   }
-  // Si es muy largo (más de 30 caracteres), probablemente es una propiedad
-  if (slug.length > 30) {
+
+  // Si es largo (más de 20 caracteres), probablemente es una propiedad
+  if (slug.length > 20) {
     return true;
   }
+
+  // Si contiene palabras clave de propiedades
+  const propertyKeywords = [
+    'venta', 'alquiler', 'en-venta', 'en-alquiler',
+    'apartamento-en', 'casa-en', 'villa-en', 'penthouse-en',
+    'habitaciones', 'banos', 'parqueos', 'piscina',
+    'vista-al-mar', 'frente-al-mar', 'proyecto',
+  ];
+
+  for (const keyword of propertyKeywords) {
+    if (slugLower.includes(keyword)) {
+      return true;
+    }
+  }
+
   return false;
 }
 
