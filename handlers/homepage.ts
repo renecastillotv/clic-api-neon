@@ -120,11 +120,16 @@ export async function handleHomepage(options: {
         return {
           id: t.id,
           content: contentText,
+          excerpt: contentText,
+          full_testimonial: contentText,
           rating: t.rating || 5,
           client_name: t.client_name,
           client_photo: t.client_photo,
+          client_avatar: t.client_photo,
           client_location: t.client_location,
-          is_featured: t.is_featured
+          transaction_location: t.client_location,
+          is_featured: t.is_featured,
+          featured: t.is_featured || false
         };
       }),
       // FAQs removidos de aquí - ya están en sections para evitar duplicación
@@ -383,10 +388,16 @@ function buildHomepageSections(
         return {
           id: t.id,
           content: contentText,
+          // El componente Testimonials.astro usa excerpt o full_testimonial
+          excerpt: contentText,
+          full_testimonial: contentText,
           rating: t.rating || 5,
           client_name: t.client_name,
           client_photo: t.client_photo,
-          client_location: t.client_location
+          client_avatar: t.client_photo,
+          client_location: t.client_location,
+          transaction_location: t.client_location,
+          featured: t.is_featured || false
         };
       }),
       countryContext: {
