@@ -262,6 +262,8 @@ export async function getProperties(options: {
 export async function getPropertyBySlug(slug: string, tenantId: string) {
   const sql = getSQL();
 
+  console.log('[getPropertyBySlug] Searching for slug:', slug, 'tenantId:', tenantId);
+
   // El slug ya viene como el último segmento desde el router
   const result = await sql`
     SELECT

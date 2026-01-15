@@ -243,8 +243,12 @@ export async function handleSingleProperty(options: {
 }): Promise<any | null> {
   const { tenant, propertySlug, language, trackingString } = options;
 
+  console.log('[handleSingleProperty] Looking for slug:', propertySlug, 'tenant:', tenant.id);
+
   // Obtener propiedad (busca por slug simple o URL completa)
   const rawProperty = await db.getPropertyBySlug(propertySlug, tenant.id);
+
+  console.log('[handleSingleProperty] Result:', rawProperty ? `Found: ${rawProperty.id}` : 'NOT FOUND');
 
   if (!rawProperty) {
     return null;
