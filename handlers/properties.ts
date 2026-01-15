@@ -1202,38 +1202,101 @@ function parseCoordinates(coordString: string | null): { lat: number; lng: numbe
 function buildProjectDetails(prop: any): any {
   if (!prop.is_project) return null;
 
-  // Construir tipología básica basada en los datos de la propiedad
-  // SinglePropertyLayout espera: project_typologies, project_payment_plans, project_phases, developers
-  const typology = {
-    bedrooms: prop.habitaciones || 0,
-    bathrooms: prop.banos || 0,
-    built_area: prop.m2_construccion || 0,
-    sale_price_from: prop.precio_venta || prop.precio || 0,
-    sale_price_to: prop.precio_venta || prop.precio || 0,
-    sale_currency: prop.moneda || 'USD',
-    available_units: 1
-  };
+  // =====================================================================
+  // TIPOLOGÍAS - Usar array tipologias de la propiedad si existe
+  // Estructura BD: [{id, nombre, habitaciones, banos, m2, precio, studio, medios_banos, estacionamiento}]
+  // =====================================================================
+  let projectTypologies = [];
 
-  // Plan de pago predeterminado para proyectos
-  const defaultPaymentPlan = {
-    name: 'Plan Estándar',
-    is_default: true,
-    reservation_amount: prop.monto_reserva || 1000,
-    reservation_currency: prop.moneda_reserva || 'USD',
-    separation_percentage: prop.porcentaje_separacion || 10,
-    construction_percentage: prop.porcentaje_construccion || 60,
-    delivery_percentage: prop.porcentaje_entrega || 30
-  };
+  if (Array.isArray(prop.tipologias) && prop.tipologias.length > 0) {
+    // Usar tipologías reales de la base de datos
+    projectTypologies = prop.tipologias.map((typo: any) => ({
+      id: typo.id,
+      name: typo.nombre || `${typo.habitaciones} Hab`,
+      bedrooms: parseInt(typo.habitaciones) || 0,
+      bathrooms: parseInt(typo.banos) || 0,
+      half_bathrooms: parseInt(typo.medios_banos) || 0,
+      built_area: parseFloat(typo.m2) || 0,
+      sale_price_from: parseFloat(typo.precio) || 0,
+      sale_price_to: parseFloat(typo.precio) || 0,
+      sale_currency: prop.moneda || 'USD',
+      parking_spots: parseInt(typo.estacionamiento) || 0,
+      has_studio: typo.studio === true || typo.studio === 'true',
+      available_units: 1
+    }));
+  } else {
+    // Fallback: crear una tipología básica desde los datos de la propiedad
+    projectTypologies = [{
+      bedrooms: prop.habitaciones || 0,
+      bathrooms: prop.banos || 0,
+      built_area: parseFloat(prop.m2_construccion) || 0,
+      sale_price_from: parseFloat(prop.precio_min) || parseFloat(prop.precio_venta) || parseFloat(prop.precio) || 0,
+      sale_price_to: parseFloat(prop.precio_max) || parseFloat(prop.precio_venta) || parseFloat(prop.precio) || 0,
+      sale_currency: prop.moneda || 'USD',
+      available_units: 1
+    }];
+  }
 
-  // Fase del proyecto
-  const projectPhase = {
-    phase_name: prop.fase_nombre || 'Fase 1',
-    estimated_delivery: prop.fecha_entrega || null,
-    completion_percentage: prop.porcentaje_avance || 0
-  };
+  // =====================================================================
+  // PLANES DE PAGO - Usar objeto planes_pago de la propiedad
+  // Estructura BD: {separacion, reserva_valor, contra_entrega, inicial_construccion}
+  // =====================================================================
+  let projectPaymentPlans = [];
+
+  if (prop.planes_pago && typeof prop.planes_pago === 'object') {
+    const plan = prop.planes_pago;
+    projectPaymentPlans = [{
+      name: 'Plan de Pago',
+      is_default: true,
+      reservation_amount: parseFloat(plan.reserva_valor) || 1000,
+      reservation_currency: prop.moneda || 'USD',
+      separation_percentage: parseFloat(plan.separacion) || 10,
+      construction_percentage: parseFloat(plan.inicial_construccion) || 40,
+      delivery_percentage: parseFloat(plan.contra_entrega) || 50
+    }];
+  } else {
+    // Fallback: plan de pago predeterminado
+    projectPaymentPlans = [{
+      name: 'Plan Estándar',
+      is_default: true,
+      reservation_amount: 1000,
+      reservation_currency: prop.moneda || 'USD',
+      separation_percentage: 10,
+      construction_percentage: 40,
+      delivery_percentage: 50
+    }];
+  }
+
+  // =====================================================================
+  // ETAPAS/FASES - Usar array etapas de la propiedad
+  // Estructura BD: [{id, nombre, fecha_entrega}]
+  // =====================================================================
+  let projectPhases = [];
+
+  if (Array.isArray(prop.etapas) && prop.etapas.length > 0) {
+    projectPhases = prop.etapas.map((etapa: any, index: number) => ({
+      id: etapa.id,
+      phase_name: etapa.nombre || `Etapa ${index + 1}`,
+      estimated_delivery: etapa.fecha_entrega || null,
+      completion_percentage: 0
+    }));
+  } else {
+    // Fallback: usar fecha_entrega general si existe
+    projectPhases = [{
+      phase_name: 'Fase 1',
+      estimated_delivery: prop.fecha_entrega || null,
+      completion_percentage: 0
+    }];
+  }
+
+  // =====================================================================
+  // BENEFICIOS Y GARANTÍAS
+  // =====================================================================
+  const benefits = Array.isArray(prop.beneficios) ? prop.beneficios : [];
+  const guarantees = Array.isArray(prop.garantias) ? prop.garantias : [];
 
   return {
-    id: prop.proyecto_id,
+    id: prop.proyecto_id || prop.id,
     name: prop.proyecto_nombre || prop.titulo,
     status: {
       construction: prop.estado_construccion || 'En construcción',
@@ -1241,16 +1304,33 @@ function buildProjectDetails(prop: any): any {
       completion: prop.fecha_entrega
     },
     // Estructuras que espera SinglePropertyLayout.astro
-    project_typologies: [typology],
-    project_payment_plans: [defaultPaymentPlan],
-    project_phases: [projectPhase],
-    // Desarrollador (si existe en los datos)
+    project_typologies: projectTypologies,
+    project_payment_plans: projectPaymentPlans,
+    project_phases: projectPhases,
+    // Beneficios y garantías del proyecto
+    benefits: benefits,
+    guarantees: guarantees,
+    // Desarrollador (si existe desarrollador_id, se podría hacer JOIN)
     developers: prop.desarrollador_nombre ? {
+      id: prop.desarrollador_id,
       name: prop.desarrollador_nombre,
       logo_url: prop.desarrollador_logo || null,
       years_experience: prop.desarrollador_experiencia || null,
       total_projects: prop.desarrollador_proyectos || null
-    } : null
+    } : null,
+    // Rangos de precio del proyecto
+    price_range: {
+      min: parseFloat(prop.precio_min) || null,
+      max: parseFloat(prop.precio_max) || null,
+      currency: prop.moneda || 'USD'
+    },
+    // Rangos de características
+    specs_range: {
+      bedrooms: { min: prop.habitaciones_min, max: prop.habitaciones_max },
+      bathrooms: { min: prop.banos_min, max: prop.banos_max },
+      area: { min: parseFloat(prop.m2_min), max: parseFloat(prop.m2_max) },
+      parking: { min: prop.parqueos_min, max: prop.parqueos_max }
+    }
   };
 }
 
