@@ -288,10 +288,12 @@ export async function handleSingleProperty(options: {
   const amenityDetailsArray = amenityDetails as any[];
   const processedAmenities = amenityNames.map(name => {
     const detail = amenityDetailsArray.find((a: any) => a.nombre === name);
+    // Las traducciones están en el campo JSONB 'traducciones'
+    const traducciones = detail?.traducciones || {};
     return {
       name: name,
-      name_en: detail?.nombre_en || name,
-      name_fr: detail?.nombre_fr || name,
+      name_en: traducciones.en?.nombre || traducciones.nombre_en || name,
+      name_fr: traducciones.fr?.nombre || traducciones.nombre_fr || name,
       icon: detail?.icono || 'fas fa-check',
       category: detail?.categoria || 'General'
     };

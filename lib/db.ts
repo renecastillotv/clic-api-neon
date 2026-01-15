@@ -880,14 +880,15 @@ export async function getAmenityDetails(tenantId: string, amenityNames: string[]
   const result = await sql`
     SELECT
       id,
+      codigo,
       nombre,
-      nombre_en,
-      nombre_fr,
       icono,
-      categoria
+      categoria,
+      traducciones
     FROM amenidades
     WHERE tenant_id = ${tenantId}
       AND nombre = ANY(${amenityNames})
+      AND activo = true
   `;
   return result;
 }
