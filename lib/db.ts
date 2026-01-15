@@ -492,9 +492,11 @@ export async function getQuickStats(tenantId: string) {
 // Obtener propiedades destacadas
 export async function getFeaturedProperties(tenantId: string, limit: number = 12) {
   const sql = getSQL();
-  return sql`
+  // Primero intenta obtener propiedades destacadas, si no hay, trae las más recientes
+  const featured = await sql`
     SELECT
       p.id,
+      p.codigo,
       p.slug,
       p.titulo,
       p.tipo,
@@ -503,19 +505,68 @@ export async function getFeaturedProperties(tenantId: string, limit: number = 12
       p.precio_venta,
       p.precio_alquiler,
       p.moneda,
+      p.moneda_venta,
+      p.moneda_alquiler,
       p.ciudad,
       p.sector,
+      p.provincia,
       p.habitaciones,
       p.banos,
+      p.estacionamientos,
       p.m2_construccion,
+      p.m2_terreno,
       p.imagen_principal,
+      p.imagenes,
       p.destacada,
+      p.is_project,
       p.created_at
     FROM propiedades p
     WHERE p.tenant_id = ${tenantId}
       AND p.activo = true
       AND p.estado_propiedad = 'disponible'
       AND p.destacada = true
+    ORDER BY p.created_at DESC
+    LIMIT ${limit}
+  `;
+
+  // Si hay propiedades destacadas, devuélvelas
+  const featuredArray = featured as Record<string, any>[];
+  if (featuredArray.length > 0) {
+    return featuredArray;
+  }
+
+  // Si no hay destacadas, trae las más recientes
+  return sql`
+    SELECT
+      p.id,
+      p.codigo,
+      p.slug,
+      p.titulo,
+      p.tipo,
+      p.operacion,
+      p.precio,
+      p.precio_venta,
+      p.precio_alquiler,
+      p.moneda,
+      p.moneda_venta,
+      p.moneda_alquiler,
+      p.ciudad,
+      p.sector,
+      p.provincia,
+      p.habitaciones,
+      p.banos,
+      p.estacionamientos,
+      p.m2_construccion,
+      p.m2_terreno,
+      p.imagen_principal,
+      p.imagenes,
+      p.destacada,
+      p.is_project,
+      p.created_at
+    FROM propiedades p
+    WHERE p.tenant_id = ${tenantId}
+      AND p.activo = true
+      AND p.estado_propiedad = 'disponible'
     ORDER BY p.created_at DESC
     LIMIT ${limit}
   `;

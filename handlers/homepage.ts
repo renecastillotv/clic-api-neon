@@ -220,11 +220,13 @@ function toSupabasePropertyFormat(prop: any, language: string, trackingString: s
   const bedroomsCount = prop.habitaciones || 0;
   const bathroomsCount = prop.banos || 0;
   const builtArea = prop.m2_construccion || prop.area_construida || 0;
+  // Código público de referencia (usar codigo si existe, sino generar uno corto del ID)
+  const publicCode = prop.codigo || `P-${String(prop.id).substring(0, 6).toUpperCase()}`;
 
   return {
     // Campos originales del formato Supabase
     id: prop.id,
-    code: prop.codigo || prop.id,
+    code: publicCode,
     name: prop.titulo || 'Propiedad sin nombre',
     description: prop.descripcion || prop.short_description || '',
     agent_id: prop.agente_id || prop.perfil_asesor_id,
