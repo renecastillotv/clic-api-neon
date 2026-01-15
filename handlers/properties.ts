@@ -302,6 +302,8 @@ export async function handleSingleProperty(options: {
   // Obtener datos relacionados en paralelo
   // Usar captador_id (usuario) para buscar propiedades del agente
   const captadorId = rawProperty.captador_id || rawProperty.captador_usuario_id;
+  console.log('[handleSingleProperty] captadorId for agent properties:', captadorId);
+
   const [similarPropertiesRaw, agentProperties, faqsRaw, testimonialsRaw, recentArticles, recentVideos, amenityDetails, cocaptadoresData] = await Promise.all([
     db.getSimilarProperties(tenant.id, rawProperty.id, 4),
     getAgentProperties(tenant.id, captadorId, rawProperty.id, language, trackingString),
@@ -480,14 +482,42 @@ export async function handleSingleProperty(options: {
     url: c.slug ? `/asesores/${c.slug}` : null
   }));
 
+  // Formatear propiedades del agente para el carrusel
+  // El frontend espera campos con sufijo _display y otros campos específicos
+  const formattedAgentProperties = agentProperties.map(p => ({
+    id: p.id,
+    title: p.name,
+    title_display: p.name || 'Propiedad',
+    price: p.pricing_unified?.display_price?.formatted || 'Precio a consultar',
+    price_display: p.pricing_unified?.display_price?.formatted || 'Precio a consultar',
+    operation_display: p.pricing_unified?.operation_type === 'venta'
+      ? (language === 'es' ? 'En Venta' : language === 'en' ? 'For Sale' : 'À Vendre')
+      : (language === 'es' ? 'En Alquiler' : language === 'en' ? 'For Rent' : 'À Louer'),
+    category_display: p.property_categories?.name || 'Propiedad',
+    location_display: `${p.sectors?.name || ''}, ${p.cities?.name || ''}`.replace(/^, |, $/g, '') || 'Ubicación no especificada',
+    bedrooms: p.bedrooms,
+    bathrooms: p.bathrooms,
+    built_area: p.built_area,
+    parking_spots: p.parking_spots,
+    area: p.built_area,
+    image: p.main_image_url,
+    main_image_url: p.main_image_url,
+    location: `${p.sectors?.name || ''}, ${p.cities?.name || ''}`.replace(/^, |, $/g, ''),
+    type: p.property_categories?.name,
+    url: p.slug_url,
+    is_project: p.is_project
+  }));
+
   // Construir estructura agent completa como espera el frontend
   const agent = {
     main: agentMain,
     cocaptors: formattedCocaptores,
     cocaptors_count: formattedCocaptores.length,
     source: 'captador',
-    should_show_properties: agentProperties.length > 0,
-    properties_count: agentProperties.length
+    should_show_properties: formattedAgentProperties.length > 0,
+    properties_count: formattedAgentProperties.length,
+    // Propiedades del agente para el carrusel - estructura esperada por AgentPropertiesCarousel.astro
+    properties: formattedAgentProperties
   };
 
   // Generar breadcrumbs para propiedad individual
@@ -1184,7 +1214,12 @@ async function getAgentProperties(
   language: string,
   trackingString: string
 ): Promise<PropertyForList[]> {
-  if (!captadorId) return [];
+  if (!captadorId) {
+    console.log('[getAgentProperties] No captadorId provided, returning empty array');
+    return [];
+  }
+
+  console.log('[getAgentProperties] Searching properties for captador:', captadorId);
 
   const sql = db.getSQL();
 
@@ -1195,7 +1230,7 @@ async function getAgentProperties(
       p.precio, p.precio_venta, p.precio_alquiler, p.moneda,
       p.ciudad, p.sector, p.direccion, p.habitaciones, p.banos,
       p.estacionamientos, p.m2_construccion, p.m2_terreno,
-      p.imagen_principal, p.destacada, p.created_at, p.is_project,
+      p.imagen_principal, p.destacado, p.created_at, p.is_project,
       p.estado_propiedad
     FROM propiedades p
     WHERE p.tenant_id = ${tenantId}
@@ -1206,11 +1241,14 @@ async function getAgentProperties(
         p.captador_id = ${captadorId}::uuid
         OR p.cocaptadores_ids @> ${JSON.stringify([captadorId])}::jsonb
       )
-    ORDER BY p.destacada DESC, p.created_at DESC
+    ORDER BY p.destacado DESC, p.created_at DESC
     LIMIT 6
   `;
 
-  return properties.map(p => toSupabasePropertyFormat(p, language, trackingString));
+  const propertiesArray = properties as any[];
+  console.log('[getAgentProperties] Found properties:', propertiesArray.length);
+
+  return propertiesArray.map(p => toSupabasePropertyFormat(p, language, trackingString));
 }
 
 export default {
