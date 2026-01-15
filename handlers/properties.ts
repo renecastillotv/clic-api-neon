@@ -410,10 +410,23 @@ function toSupabasePropertyFormat(prop: any, language: string, trackingString: s
     };
   }
 
-  // Parsear imágenes
+  // Extraer variables igual que en homepage.ts
   const mainImage = prop.imagen_principal || '';
   const galleryImages = parseGalleryImages(prop.galeria_imagenes || prop.imagenes);
   const allImages = [mainImage, ...galleryImages.filter(img => img !== mainImage)].filter(Boolean);
+  const slugUrl = buildPropertySlugUrl(prop, language);
+  const propertyType = formatPropertyType(prop.tipo, language);
+  const sectorName = prop.sector || '';
+  const cityName = prop.ciudad || '';
+  const bedroomsCount = prop.habitaciones || 0;
+  const bathroomsCount = prop.banos || 0;
+  const builtArea = prop.m2_construccion || prop.area_construida || 0;
+  const landArea = prop.m2_terreno || prop.area_total || 0;
+
+  // Código público de referencia (usar codigo_publico si existe, sino codigo, sino generar uno)
+  const publicCode = prop.codigo_publico
+    ? String(prop.codigo_publico)
+    : (prop.codigo || `P-${String(prop.id).substring(0, 6).toUpperCase()}`);
 
   const imagesUnified: ImagesUnified[] = allImages.map((url, index) => ({
     url,
@@ -423,15 +436,8 @@ function toSupabasePropertyFormat(prop: any, language: string, trackingString: s
     position: index
   }));
 
-  // Construir URL en formato Supabase
-  const slugUrl = buildPropertySlugUrl(prop, language);
-
-  // Código público de referencia (usar codigo_publico si existe, sino codigo, sino generar uno)
-  const publicCode = prop.codigo_publico
-    ? String(prop.codigo_publico)
-    : (prop.codigo || `P-${String(prop.id).substring(0, 6).toUpperCase()}`);
-
   return {
+    // Campos originales del formato Supabase
     id: prop.id,
     code: publicCode,
     name: prop.titulo || 'Propiedad sin nombre',
@@ -446,11 +452,11 @@ function toSupabasePropertyFormat(prop: any, language: string, trackingString: s
     temp_rental_currency: prop.moneda_alquiler_temporal || currency,
     furnished_rental_price: furnishedRentalPrice,
     furnished_rental_currency: prop.moneda_alquiler_amueblado || currency,
-    bedrooms: prop.habitaciones || 0,
-    bathrooms: prop.banos || 0,
+    bedrooms: bedroomsCount,
+    bathrooms: bathroomsCount,
     parking_spots: prop.estacionamientos || prop.parking || 0,
-    built_area: parseFloat(prop.m2_construccion) || parseFloat(prop.area_construida) || null,
-    land_area: parseFloat(prop.m2_terreno) || parseFloat(prop.area_total) || null,
+    built_area: builtArea,
+    land_area: landArea,
     main_image_url: mainImage,
     gallery_images_url: galleryImages.join(','),
     property_status: prop.estado_propiedad || 'disponible',
@@ -460,11 +466,11 @@ function toSupabasePropertyFormat(prop: any, language: string, trackingString: s
     exact_coordinates: prop.coordenadas || null,
     show_exact_location: prop.mostrar_ubicacion_exacta || false,
     property_categories: {
-      name: formatPropertyType(prop.tipo, language),
+      name: propertyType,
       description: ''
     },
     cities: {
-      name: prop.ciudad || '',
+      name: cityName,
       coordinates: prop.ciudad_coordenadas || null,
       provinces: {
         name: prop.provincia || '',
@@ -472,7 +478,7 @@ function toSupabasePropertyFormat(prop: any, language: string, trackingString: s
       }
     },
     sectors: {
-      name: prop.sector || '',
+      name: sectorName,
       coordinates: prop.sector_coordenadas || null
     },
     property_images: imagesUnified.map(img => ({
@@ -487,26 +493,25 @@ function toSupabasePropertyFormat(prop: any, language: string, trackingString: s
     images_count: allImages.length,
     location: {
       address: prop.direccion || '',
-      sector: prop.sector,
-      city: prop.ciudad,
+      sector: sectorName,
+      city: cityName,
       province: prop.provincia
     },
 
     // ============================================================
-    // Campos en español para compatibilidad con PropertyList.astro
-    // (igual que en homepage.ts para PropertyCarousel.astro)
+    // Campos en español para PropertyList.astro (IGUAL que homepage.ts)
     // ============================================================
     slug: slugUrl,
     titulo: prop.titulo || 'Propiedad sin nombre',
     precio: pricingUnified.display_price.formatted,
     imagen: mainImage,
-    imagenes: allImages,
-    sector: prop.sector || prop.ciudad || 'Ubicación no especificada',
-    habitaciones: prop.habitaciones || 0,
-    banos: prop.banos || 0,
-    metros: parseFloat(prop.m2_construccion) || parseFloat(prop.area_construida) || 0,
-    metros_terreno: parseFloat(prop.m2_terreno) || parseFloat(prop.area_total) || 0,
-    tipo: formatPropertyType(prop.tipo, language),
+    imagenes: allImages.length > 0 ? allImages : (mainImage ? [mainImage] : []),
+    sector: sectorName || cityName || 'Ubicación no especificada',
+    habitaciones: bedroomsCount,
+    banos: bathroomsCount,
+    metros: parseFloat(String(builtArea)) || 0,
+    metros_terreno: parseFloat(String(landArea)) || 0,
+    tipo: propertyType,
     destacado: prop.destacado || prop.is_featured || false,
     nuevo: prop.nuevo || false,
     parqueos: prop.estacionamientos || prop.parking || 0,
