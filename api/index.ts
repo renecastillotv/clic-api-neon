@@ -151,18 +151,23 @@ export default async function handler(request: Request): Promise<Response> {
       case 'property-list':
         // Si hay un último segmento, verificar si es una propiedad individual
         if (lastSegment && segments.length > 1) {
-          // Buscar si el último segmento es un slug de propiedad en la BD
-          const singlePropertyResponse = await propertiesHandler.handleSingleProperty({
-            tenant,
-            propertySlug: lastSegment,
-            language,
-            trackingString,
-          });
+          try {
+            // Buscar si el último segmento es un slug de propiedad en la BD
+            const singlePropertyResponse = await propertiesHandler.handleSingleProperty({
+              tenant,
+              propertySlug: lastSegment,
+              language,
+              trackingString,
+            });
 
-          if (singlePropertyResponse) {
-            // Es una propiedad individual
-            response = singlePropertyResponse;
-            break;
+            if (singlePropertyResponse) {
+              // Es una propiedad individual
+              response = singlePropertyResponse;
+              break;
+            }
+          } catch (err) {
+            // Si falla la búsqueda de propiedad, continuar con property-list
+            console.error('[API] Error checking single property:', err);
           }
         }
 
