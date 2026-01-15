@@ -265,16 +265,23 @@ export async function getPropertyBySlug(slug: string, tenantId: string) {
   console.log('[getPropertyBySlug] Searching for slug:', slug, 'tenantId:', tenantId);
 
   // El slug ya viene como el último segmento desde el router
+  // JOIN con perfiles_asesor para obtener datos del agente
   const result = await sql`
     SELECT
       p.*,
+      pa.slug as agente_slug,
+      pa.foto_url as agente_foto_url,
+      pa.biografia as agente_biografia,
+      pa.experiencia_anos as agente_experiencia_anos,
+      pa.idiomas as agente_idiomas,
+      pa.redes_sociales as agente_redes_sociales,
       u.nombre as agente_nombre,
       u.apellido as agente_apellido,
       u.email as agente_email,
-      u.telefono as agente_telefono,
-      u.slug as agente_slug
+      u.telefono as agente_telefono
     FROM propiedades p
-    LEFT JOIN usuarios u ON p.agente_id = u.id
+    LEFT JOIN perfiles_asesor pa ON p.perfil_asesor_id = pa.id
+    LEFT JOIN usuarios u ON pa.usuario_id = u.id
     WHERE p.tenant_id = ${tenantId}
       AND p.estado_propiedad IN ('disponible', 'reservado')
       AND p.slug = ${slug}
