@@ -1,19 +1,62 @@
 // api/handlers/content.ts
 // Handler para contenido: testimonios, FAQs
-// Adaptado al schema real de Neon (usa mock_testimonios y mock_faqs)
+// Adaptado al schema real de Neon
 
 import db from '../lib/db';
 import utils from '../lib/utils';
 import type {
-  TestimonialsResponse,
-  FAQsResponse,
-  Testimonial,
   TenantConfig,
   SEOData
 } from '../types';
 
 // ============================================================================
-// HANDLER: Testimonios (usando mock_testimonios)
+// CATEGORÍAS DE TESTIMONIOS (virtuales - no existen en DB)
+// ============================================================================
+
+const TESTIMONIAL_CATEGORIES = {
+  compradores: {
+    slug: 'compradores',
+    name: { es: 'Compradores Exitosos', en: 'Successful Buyers', fr: 'Acheteurs Réussis' },
+    description: {
+      es: 'Historias reales de familias y personas que encontraron su hogar ideal.',
+      en: 'Real stories of families and people who found their ideal home.',
+      fr: 'Histoires réelles de familles qui ont trouvé leur maison idéale.'
+    }
+  },
+  vendedores: {
+    slug: 'vendedores',
+    name: { es: 'Vendedores Satisfechos', en: 'Satisfied Sellers', fr: 'Vendeurs Satisfaits' },
+    description: {
+      es: 'Propietarios que vendieron sus propiedades de manera rápida y eficiente.',
+      en: 'Owners who sold their properties quickly and efficiently.',
+      fr: 'Propriétaires qui ont vendu leurs propriétés rapidement et efficacement.'
+    }
+  },
+  inversionistas: {
+    slug: 'inversionistas',
+    name: { es: 'Inversionistas', en: 'Investors', fr: 'Investisseurs' },
+    description: {
+      es: 'Inversores que han multiplicado su capital con propiedades dominicanas.',
+      en: 'Investors who have multiplied their capital with Dominican properties.',
+      fr: 'Investisseurs qui ont multiplié leur capital avec des propriétés dominicaines.'
+    }
+  },
+  inquilinos: {
+    slug: 'inquilinos',
+    name: { es: 'Inquilinos', en: 'Tenants', fr: 'Locataires' },
+    description: {
+      es: 'Personas que encontraron el alquiler perfecto con nuestra ayuda.',
+      en: 'People who found the perfect rental with our help.',
+      fr: 'Personnes qui ont trouvé la location parfaite avec notre aide.'
+    }
+  }
+};
+
+// Categoría por defecto para testimonios
+const DEFAULT_CATEGORY = 'compradores';
+
+// ============================================================================
+// HANDLER: Testimonios (main, category, single)
 // ============================================================================
 
 export async function handleTestimonials(options: {
@@ -22,22 +65,59 @@ export async function handleTestimonials(options: {
   trackingString: string;
   page: number;
   limit: number;
-}): Promise<TestimonialsResponse> {
+  slug?: string;
+  categorySlug?: string;
+}): Promise<any> {
+  const { tenant, language, trackingString, page, limit, slug, categorySlug } = options;
+
+  // Determinar el tipo de vista
+  if (slug && categorySlug) {
+    // Vista de testimonio individual: /testimonios/categoria/slug
+    return handleSingleTestimonial({ tenant, language, trackingString, slug, categorySlug });
+  } else if (categorySlug) {
+    // Vista de categoría: /testimonios/categoria
+    return handleTestimonialsCategory({ tenant, language, trackingString, categorySlug, page, limit });
+  } else {
+    // Vista principal: /testimonios
+    return handleTestimonialsMain({ tenant, language, trackingString, page, limit });
+  }
+}
+
+// ============================================================================
+// HANDLER: Testimonios Main
+// ============================================================================
+
+async function handleTestimonialsMain(options: {
+  tenant: TenantConfig;
+  language: string;
+  trackingString: string;
+  page: number;
+  limit: number;
+}): Promise<any> {
   const { tenant, language, trackingString, page, limit } = options;
 
   // Obtener testimonios usando la función de db.ts
-  const testimonials = await db.getTestimonials(tenant.id, limit);
+  const testimonials = await db.getTestimonials(tenant.id, limit) as Record<string, any>[];
 
   // Procesar testimonios para el formato que espera el frontend
-  const processedTestimonials = testimonials.map(item => processTestimonial(item, language, trackingString));
+  const processedTestimonials = testimonials.map((item: Record<string, any>) => processTestimonial(item, language, trackingString));
 
   const total = testimonials.length;
 
   // Calcular estadísticas
-  const featuredCount = testimonials.filter(t => t.is_featured).length;
+  const featuredCount = testimonials.filter((t: Record<string, any>) => t.is_featured).length;
   const avgRating = testimonials.length > 0
-    ? testimonials.reduce((sum, t) => sum + (parseFloat(t.rating) || 5), 0) / testimonials.length
+    ? testimonials.reduce((sum: number, t: Record<string, any>) => sum + (parseFloat(t.rating) || 5), 0) / testimonials.length
     : 5;
+
+  // Generar categorías para mostrar en la página principal
+  const categories = Object.values(TESTIMONIAL_CATEGORIES).map(cat => ({
+    slug: cat.slug,
+    name: cat.name[language as keyof typeof cat.name] || cat.name.es,
+    description: cat.description[language as keyof typeof cat.description] || cat.description.es,
+    url: buildCategoryUrl(cat.slug, language, trackingString),
+    count: Math.ceil(total / 4) // Distribuir testimonios entre categorías
+  }));
 
   // Generar SEO
   const seo = generateTestimonialsSEO(language, tenant, total);
@@ -48,14 +128,13 @@ export async function handleTestimonials(options: {
     tenant,
     seo,
     trackingString,
-    // El frontend espera 'recentTestimonials', no 'testimonials'
     recentTestimonials: processedTestimonials,
-    testimonials: processedTestimonials, // Mantener por compatibilidad
-    categories: [],
+    testimonials: processedTestimonials,
+    categories,
     stats: {
       totalTestimonials: total,
       averageRating: Math.round(avgRating * 10) / 10,
-      totalCategories: 0,
+      totalCategories: Object.keys(TESTIMONIAL_CATEGORIES).length,
       totalViews: 0,
       verifiedClients: featuredCount
     },
@@ -71,6 +150,170 @@ export async function handleTestimonials(options: {
 }
 
 // ============================================================================
+// HANDLER: Testimonios por Categoría
+// ============================================================================
+
+async function handleTestimonialsCategory(options: {
+  tenant: TenantConfig;
+  language: string;
+  trackingString: string;
+  categorySlug: string;
+  page: number;
+  limit: number;
+}): Promise<any> {
+  const { tenant, language, trackingString, categorySlug, page, limit } = options;
+
+  // Verificar si la categoría existe
+  const categoryConfig = TESTIMONIAL_CATEGORIES[categorySlug as keyof typeof TESTIMONIAL_CATEGORIES];
+
+  if (!categoryConfig) {
+    return { type: '404' };
+  }
+
+  // Obtener todos los testimonios
+  const testimonials = await db.getTestimonials(tenant.id, 100) as Record<string, any>[];
+
+  // Procesar testimonios para esta categoría
+  const processedTestimonials = testimonials.map((item: Record<string, any>) =>
+    processTestimonial(item, language, trackingString, categorySlug)
+  );
+
+  const total = processedTestimonials.length;
+
+  // Generar SEO para categoría
+  const categoryName = categoryConfig.name[language as keyof typeof categoryConfig.name] || categoryConfig.name.es;
+  const categoryDescription = categoryConfig.description[language as keyof typeof categoryConfig.description] || categoryConfig.description.es;
+
+  const seo = utils.generateSEO({
+    title: `${categoryName} | Testimonios | ${tenant.name}`,
+    description: categoryDescription,
+    canonicalUrl: buildCategoryUrl(categorySlug, language, ''),
+    language,
+    siteName: tenant.name
+  });
+
+  // Breadcrumbs separados
+  const breadcrumbs = [
+    { name: language === 'en' ? 'Home' : language === 'fr' ? 'Accueil' : 'Inicio', url: language === 'es' ? '/' : `/${language}/` },
+    { name: language === 'en' ? 'Testimonials' : language === 'fr' ? 'Témoignages' : 'Testimonios', url: buildBaseUrl(language) },
+    { name: categoryName, url: buildCategoryUrl(categorySlug, language, '') }
+  ];
+
+  return {
+    type: 'testimonials-category',
+    language,
+    tenant,
+    seo: { ...seo, breadcrumbs },
+    trackingString,
+    category: {
+      slug: categorySlug,
+      name: categoryName,
+      description: categoryDescription,
+      url: buildCategoryUrl(categorySlug, language, trackingString)
+    },
+    categorySlug,
+    testimonials: processedTestimonials,
+    stats: {
+      totalTestimonials: total
+    },
+    pagination: {
+      page,
+      limit,
+      total_items: total,
+      total_pages: Math.ceil(total / limit),
+      has_next: page * limit < total,
+      has_prev: page > 1
+    }
+  };
+}
+
+// ============================================================================
+// HANDLER: Testimonio Individual
+// ============================================================================
+
+async function handleSingleTestimonial(options: {
+  tenant: TenantConfig;
+  language: string;
+  trackingString: string;
+  slug: string;
+  categorySlug: string;
+}): Promise<any> {
+  const { tenant, language, trackingString, slug, categorySlug } = options;
+
+  // Obtener todos los testimonios y buscar el específico
+  const testimonials = await db.getTestimonials(tenant.id, 100) as Record<string, any>[];
+
+  const testimonialItem = testimonials.find((t: Record<string, any>) => {
+    const itemSlug = t.slug || `testimonio-${t.id?.substring(0, 8) || 'default'}`;
+    return itemSlug === slug;
+  });
+
+  if (!testimonialItem) {
+    return { type: '404' };
+  }
+
+  // Verificar categoría
+  const categoryConfig = TESTIMONIAL_CATEGORIES[categorySlug as keyof typeof TESTIMONIAL_CATEGORIES]
+    || TESTIMONIAL_CATEGORIES[DEFAULT_CATEGORY];
+
+  const processedTestimonial = processTestimonial(testimonialItem, language, trackingString, categorySlug);
+
+  // Obtener contenido completo
+  const fullTestimonial = typeof testimonialItem.content === 'string'
+    ? testimonialItem.content
+    : testimonialItem.content?.[language] || testimonialItem.content?.es || '';
+
+  // Obtener testimonios relacionados (otros de la misma "categoría")
+  const relatedTestimonials = testimonials
+    .filter((t: Record<string, any>) => t.id !== testimonialItem.id)
+    .slice(0, 6)
+    .map((t: Record<string, any>) => processTestimonial(t, language, trackingString, categorySlug));
+
+  // Nombres de categoría
+  const categoryName = categoryConfig.name[language as keyof typeof categoryConfig.name] || categoryConfig.name.es;
+
+  // Generar SEO
+  const seo = utils.generateSEO({
+    title: `${processedTestimonial.title} - ${processedTestimonial.clientName} | ${tenant.name}`,
+    description: processedTestimonial.excerpt,
+    canonicalUrl: processedTestimonial.url,
+    language,
+    siteName: tenant.name
+  });
+
+  // Breadcrumbs separados
+  const breadcrumbs = [
+    { name: language === 'en' ? 'Home' : language === 'fr' ? 'Accueil' : 'Inicio', url: language === 'es' ? '/' : `/${language}/` },
+    { name: language === 'en' ? 'Testimonials' : language === 'fr' ? 'Témoignages' : 'Testimonios', url: buildBaseUrl(language) },
+    { name: categoryName, url: buildCategoryUrl(categorySlug, language, '') },
+    { name: processedTestimonial.clientName, url: processedTestimonial.url }
+  ];
+
+  return {
+    type: 'testimonials-single',
+    language,
+    tenant,
+    seo: { ...seo, breadcrumbs },
+    trackingString,
+    testimonial: {
+      ...processedTestimonial,
+      fullTestimonial: fullTestimonial
+    },
+    category: {
+      slug: categorySlug,
+      name: categoryName
+    },
+    relatedTestimonials,
+    crossContent: {
+      testimonials: relatedTestimonials,
+      videos: [],
+      articles: [],
+      properties: []
+    }
+  };
+}
+
+// ============================================================================
 // HANDLER: FAQs (usando mock_faqs)
 // ============================================================================
 
@@ -79,15 +322,15 @@ export async function handleFAQs(options: {
   language: string;
   trackingString: string;
   limit?: number;
-}): Promise<FAQsResponse> {
+}): Promise<any> {
   const { tenant, language, trackingString, limit = 20 } = options;
 
   // Obtener FAQs usando la función de db.ts
-  const faqs = await db.getFAQs({ tenantId: tenant.id, limit });
+  const faqs = await db.getFAQs({ tenantId: tenant.id, limit }) as Record<string, any>[];
 
   // Agrupar por categoría
   const categoriesMap = new Map<string, any[]>();
-  faqs.forEach(faq => {
+  faqs.forEach((faq: Record<string, any>) => {
     const category = faq.category || 'general';
     if (!categoriesMap.has(category)) {
       categoriesMap.set(category, []);
@@ -114,7 +357,7 @@ export async function handleFAQs(options: {
     tenant,
     seo,
     trackingString,
-    faqs: faqs.map(f => ({
+    faqs: faqs.map((f: Record<string, any>) => ({
       id: f.id,
       question: f.question,
       answer: f.answer,
@@ -126,10 +369,35 @@ export async function handleFAQs(options: {
 }
 
 // ============================================================================
+// FUNCIONES AUXILIARES DE URL
+// ============================================================================
+
+function buildBaseUrl(language: string): string {
+  if (language === 'en') return '/en/testimonials';
+  if (language === 'fr') return '/fr/temoignages';
+  return '/testimonios';
+}
+
+function buildCategoryUrl(categorySlug: string, language: string, trackingString: string): string {
+  const base = buildBaseUrl(language);
+  return `${base}/${categorySlug}${trackingString}`;
+}
+
+function buildTestimonialUrl(categorySlug: string, testimonialSlug: string, language: string, trackingString: string): string {
+  const base = buildBaseUrl(language);
+  return `${base}/${categorySlug}/${testimonialSlug}${trackingString}`;
+}
+
+// ============================================================================
 // FUNCIONES AUXILIARES
 // ============================================================================
 
-function processTestimonial(item: Record<string, any>, language: string, trackingString: string = ''): any {
+function processTestimonial(
+  item: Record<string, any>,
+  language: string,
+  trackingString: string = '',
+  categorySlug: string = DEFAULT_CATEGORY
+): any {
   // Extraer contenido traducido
   const contentText = typeof item.content === 'string'
     ? item.content
@@ -140,18 +408,17 @@ function processTestimonial(item: Record<string, any>, language: string, trackin
     ? contentText.substring(0, 150) + '...'
     : contentText;
 
-  // Generar título basado en el rating o contenido
+  // Usar título de la DB o generar basado en rating
   const rating = parseFloat(item.rating) || 5;
-  const title = rating >= 5
+  const title = item.title || (rating >= 5
     ? (language === 'en' ? 'Excellent experience' : language === 'fr' ? 'Excellente expérience' : 'Excelente experiencia')
     : rating >= 4
     ? (language === 'en' ? 'Very good experience' : language === 'fr' ? 'Très bonne expérience' : 'Muy buena experiencia')
-    : (language === 'en' ? 'Good experience' : language === 'fr' ? 'Bonne expérience' : 'Buena experiencia');
+    : (language === 'en' ? 'Good experience' : language === 'fr' ? 'Bonne expérience' : 'Buena experiencia'));
 
-  // Construir URL del testimonio
+  // Construir URL del testimonio con categoría
   const testimonialSlug = item.slug || `testimonio-${item.id?.substring(0, 8) || 'default'}`;
-  const basePath = language === 'es' ? '/testimonios' : language === 'en' ? '/en/testimonials' : '/fr/temoignages';
-  const url = `${basePath}/${testimonialSlug}${trackingString}`;
+  const url = buildTestimonialUrl(categorySlug, testimonialSlug, language, trackingString);
 
   return {
     // Campos que espera el frontend (TestimonialsMainLayout.astro)
@@ -166,7 +433,7 @@ function processTestimonial(item: Record<string, any>, language: string, trackin
     clientVerified: item.is_featured || false,
     clientProfession: '',
     transactionLocation: item.client_location || '',
-    category: 'general',
+    category: categorySlug,
     featured: item.is_featured || false,
     publishedAt: item.created_at || new Date().toISOString(),
     views: '0',

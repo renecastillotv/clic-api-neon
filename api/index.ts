@@ -254,13 +254,28 @@ export default async function handler(request: Request): Promise<Response> {
         break;
 
       case 'testimonials':
-        response = await contentHandler.handleTestimonials({
+        // Estructura: /testimonios, /testimonios/categoria, /testimonios/categoria/slug-testimonio
+        // segments[0] = 'testimonios' o 'testimonials' o 'temoignages'
+        // segments[1] = categorySlug (si existe)
+        // segments[2] = testimonialSlug (si existe)
+        const testimonialCategorySlug = segments.length >= 2 ? segments[1] : undefined;
+        const testimonialSlug = segments.length >= 3 ? segments[2] : undefined;
+
+        const testimonialsResult = await contentHandler.handleTestimonials({
           tenant,
+          slug: testimonialSlug,
+          categorySlug: testimonialCategorySlug,
           language,
           trackingString,
           page,
           limit,
         });
+
+        if (testimonialsResult.type === '404') {
+          response = build404Response(tenant, language, trackingString);
+        } else {
+          response = testimonialsResult as any;
+        }
         break;
 
       case 'favorites':
