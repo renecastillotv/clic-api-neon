@@ -265,29 +265,71 @@ export async function getPropertyBySlug(slug: string, tenantId: string) {
   console.log('[getPropertyBySlug] Searching for slug:', slug, 'tenantId:', tenantId);
 
   // El slug ya viene como el último segmento desde el router
-  // JOIN con perfiles_asesor para obtener datos del agente
+  // JOIN con usuarios y perfiles_asesor usando captador_id
+  // captador_id -> usuarios -> perfiles_asesor (via usuario_id)
   const result = await sql`
     SELECT
       p.*,
+      -- Datos del captador desde usuarios
+      u_captador.id as captador_usuario_id,
+      u_captador.nombre as agente_nombre,
+      u_captador.apellido as agente_apellido,
+      u_captador.email as agente_email,
+      u_captador.telefono as agente_telefono,
+      u_captador.avatar_url as agente_avatar,
+      -- Datos del perfil de asesor del captador
+      pa.id as perfil_asesor_id,
       pa.slug as agente_slug,
       pa.foto_url as agente_foto_url,
       pa.biografia as agente_biografia,
       pa.experiencia_anos as agente_experiencia_anos,
       pa.idiomas as agente_idiomas,
       pa.redes_sociales as agente_redes_sociales,
-      u.nombre as agente_nombre,
-      u.apellido as agente_apellido,
-      u.email as agente_email,
-      u.telefono as agente_telefono
+      pa.whatsapp as agente_whatsapp,
+      pa.telefono_directo as agente_telefono_directo,
+      pa.titulo_profesional as agente_titulo,
+      pa.especialidades as agente_especialidades
     FROM propiedades p
-    LEFT JOIN perfiles_asesor pa ON p.perfil_asesor_id = pa.id
-    LEFT JOIN usuarios u ON pa.usuario_id = u.id
+    -- JOIN con usuarios usando captador_id
+    LEFT JOIN usuarios u_captador ON p.captador_id = u_captador.id
+    -- JOIN con perfiles_asesor usando el usuario_id del captador
+    LEFT JOIN perfiles_asesor pa ON pa.usuario_id = u_captador.id AND pa.tenant_id = ${tenantId}
     WHERE p.tenant_id = ${tenantId}
       AND p.estado_propiedad IN ('disponible', 'reservado')
       AND p.slug = ${slug}
     LIMIT 1
   `;
   return result[0] || null;
+}
+
+// Obtener datos de cocaptadores desde array de IDs
+export async function getCocaptadoresData(tenantId: string, cocaptadoresIds: string[]) {
+  if (!cocaptadoresIds || cocaptadoresIds.length === 0) return [];
+
+  const sql = getSQL();
+  const result = await sql`
+    SELECT
+      u.id as usuario_id,
+      u.nombre,
+      u.apellido,
+      u.email,
+      u.telefono,
+      u.avatar_url,
+      pa.id as perfil_id,
+      pa.slug,
+      pa.foto_url,
+      pa.biografia,
+      pa.experiencia_anos,
+      pa.titulo_profesional,
+      pa.whatsapp,
+      pa.telefono_directo
+    FROM usuarios u
+    LEFT JOIN perfiles_asesor pa ON pa.usuario_id = u.id AND pa.tenant_id = ${tenantId}
+    WHERE u.id = ANY(${cocaptadoresIds}::uuid[])
+      AND u.activo = true
+    ORDER BY u.nombre ASC
+  `;
+  return result;
 }
 
 // Obtener agente/usuario por slug usando perfiles_asesor
@@ -1000,5 +1042,6 @@ export default {
   getRecentArticles,
   getAmenityDetails,
   getSimilarProperties,
+  getCocaptadoresData,
   getRecentVideos
 };

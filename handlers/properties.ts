@@ -287,15 +287,30 @@ export async function handleSingleProperty(options: {
     }
   }
 
+  // Parsear cocaptadores_ids del campo JSONB
+  let cocaptadoresIds: string[] = [];
+  if (rawProperty.cocaptadores_ids) {
+    try {
+      cocaptadoresIds = typeof rawProperty.cocaptadores_ids === 'string'
+        ? JSON.parse(rawProperty.cocaptadores_ids)
+        : rawProperty.cocaptadores_ids;
+    } catch (e) {
+      console.warn('Error parsing cocaptadores_ids:', e);
+    }
+  }
+
   // Obtener datos relacionados en paralelo
-  const [similarPropertiesRaw, agentProperties, faqsRaw, testimonialsRaw, recentArticles, recentVideos, amenityDetails] = await Promise.all([
+  // Usar captador_id (usuario) para buscar propiedades del agente
+  const captadorId = rawProperty.captador_id || rawProperty.captador_usuario_id;
+  const [similarPropertiesRaw, agentProperties, faqsRaw, testimonialsRaw, recentArticles, recentVideos, amenityDetails, cocaptadoresData] = await Promise.all([
     db.getSimilarProperties(tenant.id, rawProperty.id, 4),
-    getAgentProperties(tenant.id, rawProperty.agente_id, rawProperty.id, language, trackingString),
+    getAgentProperties(tenant.id, captadorId, rawProperty.id, language, trackingString),
     db.getFAQs({ tenantId: tenant.id, limit: 6 }),
     db.getTestimonials(tenant.id, 4),
     db.getRecentArticles(tenant.id, 4),
     db.getRecentVideos(tenant.id, 4),
-    amenityNames.length > 0 ? db.getAmenityDetails(tenant.id, amenityNames) : Promise.resolve([])
+    amenityNames.length > 0 ? db.getAmenityDetails(tenant.id, amenityNames) : Promise.resolve([]),
+    cocaptadoresIds.length > 0 ? db.getCocaptadoresData(tenant.id, cocaptadoresIds) : Promise.resolve([])
   ]);
 
   // Type assertions para los resultados de Neon
@@ -401,20 +416,27 @@ export async function handleSingleProperty(options: {
 
   console.log('[handleSingleProperty] Videos found:', formattedVideos.length);
 
-  // Construir objeto agente
-  const agent = rawProperty.agente_id ? {
-    id: rawProperty.agente_id,
+  // Construir objeto agente (captador principal)
+  // Usar captador_id que ahora viene con datos de usuarios y perfiles_asesor
+  const agent = captadorId ? {
+    id: captadorId,
+    user_id: rawProperty.captador_usuario_id || captadorId,
+    profile_id: rawProperty.perfil_asesor_id || null,
     name: `${rawProperty.agente_nombre || ''} ${rawProperty.agente_apellido || ''}`.trim() || 'Asesor',
-    phone: rawProperty.agente_telefono || '',
+    first_name: rawProperty.agente_nombre || '',
+    last_name: rawProperty.agente_apellido || '',
+    phone: rawProperty.agente_telefono_directo || rawProperty.agente_telefono || '',
+    whatsapp: rawProperty.agente_whatsapp || rawProperty.agente_telefono || '',
     email: rawProperty.agente_email || '',
-    position: 'Asesor Inmobiliario',
-    profile_photo_url: rawProperty.agente_avatar || rawProperty.agente_foto_url || '',
-    image: rawProperty.agente_avatar || rawProperty.agente_foto_url || '',
+    position: rawProperty.agente_titulo || 'Asesor Inmobiliario',
+    profile_photo_url: rawProperty.agente_foto_url || rawProperty.agente_avatar || '',
+    image: rawProperty.agente_foto_url || rawProperty.agente_avatar || '',
     rating: 4.9,
-    external_id: rawProperty.agente_id,
-    code: rawProperty.agente_id,
+    external_id: captadorId,
+    code: captadorId,
     years_experience: rawProperty.agente_experiencia_anos || 0,
     specialty_description: '',
+    specialties: rawProperty.agente_especialidades || [],
     languages: rawProperty.agente_idiomas || ['Español'],
     biography: rawProperty.agente_biografia || '',
     slug: rawProperty.agente_slug || '',
@@ -422,6 +444,25 @@ export async function handleSingleProperty(options: {
     active: true,
     show_on_website: true
   } : null;
+
+  // Formatear cocaptadores
+  const cocaptadoresArray = cocaptadoresData as any[];
+  const cocaptadores = cocaptadoresArray.map((c: any) => ({
+    id: c.usuario_id,
+    profile_id: c.perfil_id || null,
+    name: `${c.nombre || ''} ${c.apellido || ''}`.trim() || 'Asesor',
+    first_name: c.nombre || '',
+    last_name: c.apellido || '',
+    phone: c.telefono_directo || c.telefono || '',
+    whatsapp: c.whatsapp || c.telefono || '',
+    email: c.email || '',
+    position: c.titulo_profesional || 'Asesor Inmobiliario',
+    profile_photo_url: c.foto_url || c.avatar_url || '',
+    image: c.foto_url || c.avatar_url || '',
+    years_experience: c.experiencia_anos || 0,
+    biography: c.biografia || '',
+    slug: c.slug || ''
+  }));
 
   // Generar breadcrumbs para propiedad individual
   const breadcrumbs = generatePropertyBreadcrumbs(rawProperty, language);
@@ -445,8 +486,12 @@ export async function handleSingleProperty(options: {
     property: propertyWithAmenities,
     location,
     projectDetails: rawProperty.is_project ? buildProjectDetails(rawProperty) : null,
+    // Agente captador principal
     agent,
     referralAgent: agent,
+    // Cocaptadores (agentes adicionales que participaron en la captación)
+    coAgents: cocaptadores,
+    cocaptadores: cocaptadores,
     agentProperties: agentProperties.map(p => ({
       id: p.id,
       title: p.name,
@@ -463,7 +508,7 @@ export async function handleSingleProperty(options: {
     })),
     agentPropertiesInfo: {
       total: agentProperties.length,
-      agent_id: rawProperty.agente_id,
+      agent_id: captadorId,
       excluded_property: rawProperty.id
     },
     // snake_case para compatibilidad con SinglePropertyLayout.astro
@@ -1110,15 +1155,16 @@ function buildProjectDetails(prop: any): any {
 
 async function getAgentProperties(
   tenantId: string,
-  agentId: string | null,
+  captadorId: string | null,
   excludePropertyId: string,
   language: string,
   trackingString: string
 ): Promise<PropertyForList[]> {
-  if (!agentId) return [];
+  if (!captadorId) return [];
 
   const sql = db.getSQL();
 
+  // Buscar propiedades donde el usuario es captador o está en cocaptadores
   const properties = await sql`
     SELECT
       p.id, p.slug, p.codigo, p.codigo_publico, p.titulo, p.tipo, p.operacion,
@@ -1132,7 +1178,10 @@ async function getAgentProperties(
       AND p.activo = true
       AND p.estado_propiedad = 'disponible'
       AND p.id != ${excludePropertyId}
-      AND (p.agente_id = ${agentId} OR p.perfil_asesor_id::text = ${agentId})
+      AND (
+        p.captador_id = ${captadorId}::uuid
+        OR p.cocaptadores_ids @> ${JSON.stringify([captadorId])}::jsonb
+      )
     ORDER BY p.destacada DESC, p.created_at DESC
     LIMIT 6
   `;
