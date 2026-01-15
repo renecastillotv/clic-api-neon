@@ -497,6 +497,7 @@ export async function getFeaturedProperties(tenantId: string, limit: number = 12
     SELECT
       p.id,
       p.codigo,
+      p.codigo_publico,
       p.slug,
       p.titulo,
       p.tipo,
@@ -538,6 +539,7 @@ export async function getFeaturedProperties(tenantId: string, limit: number = 12
     SELECT
       p.id,
       p.codigo,
+      p.codigo_publico,
       p.slug,
       p.titulo,
       p.tipo,
