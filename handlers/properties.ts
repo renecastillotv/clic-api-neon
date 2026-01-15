@@ -490,7 +490,27 @@ function toSupabasePropertyFormat(prop: any, language: string, trackingString: s
       sector: prop.sector,
       city: prop.ciudad,
       province: prop.provincia
-    }
+    },
+
+    // ============================================================
+    // Campos en español para compatibilidad con PropertyList.astro
+    // (igual que en homepage.ts para PropertyCarousel.astro)
+    // ============================================================
+    slug: slugUrl,
+    titulo: prop.titulo || 'Propiedad sin nombre',
+    precio: pricingUnified.display_price.formatted,
+    imagen: mainImage,
+    imagenes: allImages,
+    sector: prop.sector || prop.ciudad || 'Ubicación no especificada',
+    habitaciones: prop.habitaciones || 0,
+    banos: prop.banos || 0,
+    metros: prop.m2_construccion || prop.area_construida || 0,
+    metros_terreno: prop.m2_terreno || prop.area_total || 0,
+    tipo: formatPropertyType(prop.tipo, language),
+    destacado: prop.destacado || prop.is_featured || false,
+    nuevo: prop.nuevo || false,
+    parqueos: prop.estacionamientos || prop.parking || 0,
+    url: slugUrl
   };
 }
 
