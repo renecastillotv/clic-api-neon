@@ -11,13 +11,14 @@ CREATE TABLE IF NOT EXISTS propuesta_reacciones (
   tipo_reaccion VARCHAR(20) NOT NULL, -- 'like', 'dislike', 'maybe', 'comment'
   comentario TEXT,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-
-  -- Un cliente solo puede tener una reacción por propiedad en una propuesta (excepto comentarios)
-  CONSTRAINT propuesta_reacciones_unique_reaction
-    UNIQUE (propuesta_id, propiedad_id, tipo_reaccion)
-    WHERE tipo_reaccion != 'comment'
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+
+-- Índice único parcial: solo una reacción de tipo like/dislike/maybe por propiedad en una propuesta
+-- Los comentarios pueden ser múltiples
+CREATE UNIQUE INDEX IF NOT EXISTS idx_propuesta_reacciones_unique_reaction
+  ON propuesta_reacciones (propuesta_id, propiedad_id, tipo_reaccion)
+  WHERE tipo_reaccion IN ('like', 'dislike', 'maybe');
 
 -- Índices para búsquedas rápidas
 CREATE INDEX IF NOT EXISTS idx_propuesta_reacciones_propuesta ON propuesta_reacciones(propuesta_id);

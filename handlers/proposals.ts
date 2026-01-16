@@ -247,14 +247,28 @@ async function addReaction(
       AND tipo_reaccion = ANY(${oppositeTypes})
   `;
 
-  // Insertar o actualizar la reacción
-  await sql`
-    INSERT INTO propuesta_reacciones (propuesta_id, propiedad_id, tipo_reaccion)
-    VALUES (${proposalId}, ${propertyId}, ${reactionType})
-    ON CONFLICT (propuesta_id, propiedad_id, tipo_reaccion)
-    WHERE tipo_reaccion != 'comment'
-    DO UPDATE SET updated_at = NOW()
+  // Verificar si ya existe la reacción
+  const existing = await sql`
+    SELECT id FROM propuesta_reacciones
+    WHERE propuesta_id = ${proposalId}
+      AND propiedad_id = ${propertyId}
+      AND tipo_reaccion = ${reactionType}
   `;
+
+  if (existing.length > 0) {
+    // Actualizar timestamp
+    await sql`
+      UPDATE propuesta_reacciones
+      SET updated_at = NOW()
+      WHERE id = ${existing[0].id}
+    `;
+  } else {
+    // Insertar nueva reacción
+    await sql`
+      INSERT INTO propuesta_reacciones (propuesta_id, propiedad_id, tipo_reaccion)
+      VALUES (${proposalId}, ${propertyId}, ${reactionType})
+    `;
+  }
 }
 
 // Eliminar reacción
