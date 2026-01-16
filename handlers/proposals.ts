@@ -154,25 +154,25 @@ async function getAdvisorInfo(userId: string | null, tenantId: string): Promise<
   const sql = getSQL();
 
   try {
-    // Primero intentar obtener el perfil del asesor vinculado al usuario
-    // Usamos solo columnas básicas de usuarios y las de perfiles_asesor
+    // Columnas de usuarios: id, nombre, apellido, email, telefono, avatar_url
+    // Columnas de perfiles_asesor: id, slug, codigo, foto_url, titulo_profesional, biografia,
+    //                              whatsapp, telefono_directo, idiomas, especialidades, redes_sociales
     const result = await sql`
       SELECT
         u.id as usuario_id,
-        u.nombre as usuario_nombre,
-        u.email as usuario_email,
+        u.nombre,
+        u.apellido,
+        u.email,
+        u.telefono as usuario_telefono,
+        u.avatar_url,
         pa.id as perfil_id,
         pa.codigo,
         pa.slug,
-        pa.nombre as perfil_nombre,
-        pa.apellido,
-        pa.email as perfil_email,
-        pa.telefono,
-        pa.telefono_directo,
+        pa.foto_url,
+        pa.titulo_profesional,
+        pa.biografia,
         pa.whatsapp,
-        pa.foto,
-        pa.cargo,
-        pa.bio,
+        pa.telefono_directo,
         pa.idiomas,
         pa.especialidades,
         pa.redes_sociales
@@ -184,11 +184,12 @@ async function getAdvisorInfo(userId: string | null, tenantId: string): Promise<
     if (result.length === 0) return null;
 
     const row = result[0];
-    const nombre = row.perfil_nombre || row.usuario_nombre || '';
+    const nombre = row.nombre || '';
     const apellido = row.apellido || '';
-    const email = row.perfil_email || row.usuario_email || '';
-    const telefono = row.telefono_directo || row.telefono || '';
-    const whatsapp = row.whatsapp || row.telefono_directo || row.telefono || '';
+    const email = row.email || '';
+    const telefono = row.telefono_directo || row.usuario_telefono || '';
+    const whatsapp = row.whatsapp || row.telefono_directo || row.usuario_telefono || '';
+    const foto = row.foto_url || row.avatar_url || '';
 
     return {
       id: row.perfil_id || row.usuario_id,
@@ -201,9 +202,9 @@ async function getAdvisorInfo(userId: string | null, tenantId: string): Promise<
       email: email,
       telefono: telefono,
       whatsapp: whatsapp,
-      foto: row.foto,
-      cargo: row.cargo || 'Asesor Inmobiliario',
-      bio: row.bio,
+      foto: foto,
+      cargo: row.titulo_profesional || 'Asesor Inmobiliario',
+      bio: row.biografia,
       idiomas: row.idiomas,
       especialidades: row.especialidades,
       redes_sociales: row.redes_sociales
