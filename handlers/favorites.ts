@@ -373,6 +373,89 @@ export async function handleFavorites(request: Request): Promise<Response> {
       }), { headers });
     }
 
+    // GET /api/favorites/details/:deviceId - Obtener favoritos con detalles de propiedades
+    if (method === 'GET' && action === 'details' && pathParts[3]) {
+      const deviceId = pathParts[3];
+      const list = await getFavoritesList(deviceId);
+
+      if (!list || !list.property_ids || list.property_ids.length === 0) {
+        return new Response(JSON.stringify({
+          success: true,
+          data: { device_id: deviceId, properties: [] }
+        }), { headers });
+      }
+
+      // Obtener detalles de las propiedades desde la tabla propiedades
+      const sql = getSQL();
+      const properties = await sql`
+        SELECT
+          p.id,
+          p.slug,
+          p.codigo,
+          p.titulo,
+          p.descripcion,
+          p.short_description,
+          p.tipo,
+          p.operacion,
+          p.precio,
+          p.precio_venta,
+          p.precio_alquiler,
+          p.moneda,
+          p.ciudad,
+          p.sector,
+          p.provincia,
+          p.habitaciones,
+          p.banos,
+          p.estacionamientos,
+          p.m2_construccion,
+          p.m2_terreno,
+          p.imagen_principal,
+          p.imagenes,
+          p.is_project,
+          p.created_at
+        FROM propiedades p
+        WHERE p.id::text = ANY(${list.property_ids})
+          OR p.slug = ANY(${list.property_ids})
+        ORDER BY p.created_at DESC
+      `;
+
+      // Formatear propiedades para el frontend
+      const formattedProperties = properties.map((prop: any) => ({
+        id: prop.id,
+        slug: prop.slug,
+        code: prop.codigo,
+        title: prop.titulo,
+        description: prop.short_description || prop.descripcion,
+        type: prop.tipo,
+        operation: prop.operacion,
+        price: prop.precio_venta || prop.precio_alquiler || prop.precio,
+        currency: prop.moneda || 'USD',
+        city: prop.ciudad,
+        sector: prop.sector,
+        province: prop.provincia,
+        bedrooms: prop.habitaciones,
+        bathrooms: prop.banos,
+        parking: prop.estacionamientos,
+        builtArea: prop.m2_construccion,
+        landArea: prop.m2_terreno,
+        mainImage: prop.imagen_principal,
+        images: prop.imagenes,
+        isProject: prop.is_project,
+        createdAt: prop.created_at,
+        // Campos adicionales para compatibilidad con el frontend
+        location: `${prop.sector || ''}, ${prop.ciudad || ''}`.replace(/^, |, $/g, ''),
+        url: `/${prop.operacion === 'alquiler' ? 'alquilar' : 'comprar'}/${prop.slug}`
+      }));
+
+      return new Response(JSON.stringify({
+        success: true,
+        data: {
+          device_id: deviceId,
+          properties: formattedProperties
+        }
+      }), { headers });
+    }
+
     // POST /api/favorites/sync - Sincronizar favoritos completos
     if (method === 'POST' && action === 'sync') {
       const body = await request.json();
