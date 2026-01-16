@@ -147,7 +147,7 @@ async function getProposalProperties(proposalId: string): Promise<PropertyDetail
   return result as PropertyDetails[];
 }
 
-// Obtener información del asesor creador (desde usuarios y perfiles_asesores)
+// Obtener información del asesor creador (desde usuarios y perfiles_asesor)
 async function getAdvisorInfo(userId: string | null, tenantId: string): Promise<any | null> {
   if (!userId) return null;
 
@@ -172,7 +172,7 @@ async function getAdvisorInfo(userId: string | null, tenantId: string): Promise<
       pa.especialidades,
       pa.redes_sociales
     FROM usuarios u
-    LEFT JOIN perfiles_asesores pa ON pa.usuario_id = u.id AND pa.tenant_id = ${tenantId}
+    LEFT JOIN perfiles_asesor pa ON pa.usuario_id = u.id AND pa.tenant_id = ${tenantId}
     WHERE u.id = ${userId}
   `;
 
