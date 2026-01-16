@@ -147,28 +147,59 @@ async function getProposalProperties(proposalId: string): Promise<PropertyDetail
   return result as PropertyDetails[];
 }
 
-// Obtener información del asesor creador
-async function getAdvisorInfo(userId: string | null): Promise<any | null> {
+// Obtener información del asesor creador (desde usuarios y perfiles_asesores)
+async function getAdvisorInfo(userId: string | null, tenantId: string): Promise<any | null> {
   if (!userId) return null;
 
   const sql = getSQL();
 
+  // Primero intentar obtener el perfil del asesor vinculado al usuario
   const result = await sql`
     SELECT
-      u.id,
-      u.nombre,
-      u.email,
-      u.telefono,
-      u.foto_url,
-      u.whatsapp
+      u.id as usuario_id,
+      pa.id as perfil_id,
+      pa.codigo,
+      pa.slug,
+      COALESCE(pa.nombre, u.nombre) as nombre,
+      COALESCE(pa.apellido, '') as apellido,
+      COALESCE(pa.email, u.email) as email,
+      COALESCE(pa.telefono_directo, pa.telefono, u.telefono) as telefono,
+      COALESCE(pa.whatsapp, pa.telefono_directo, pa.telefono) as whatsapp,
+      COALESCE(pa.foto, u.foto_url) as foto,
+      pa.cargo,
+      pa.bio,
+      pa.idiomas,
+      pa.especialidades,
+      pa.redes_sociales
     FROM usuarios u
+    LEFT JOIN perfiles_asesores pa ON pa.usuario_id = u.id AND pa.tenant_id = ${tenantId}
     WHERE u.id = ${userId}
   `;
 
-  return result[0] || null;
+  if (result.length === 0) return null;
+
+  const advisor = result[0];
+  return {
+    id: advisor.perfil_id || advisor.usuario_id,
+    usuario_id: advisor.usuario_id,
+    codigo: advisor.codigo,
+    slug: advisor.slug,
+    nombre: advisor.nombre,
+    apellido: advisor.apellido,
+    nombre_completo: `${advisor.nombre || ''} ${advisor.apellido || ''}`.trim(),
+    email: advisor.email,
+    telefono: advisor.telefono,
+    whatsapp: advisor.whatsapp,
+    foto: advisor.foto,
+    cargo: advisor.cargo || 'Asesor Inmobiliario',
+    bio: advisor.bio,
+    idiomas: advisor.idiomas,
+    especialidades: advisor.especialidades,
+    redes_sociales: advisor.redes_sociales
+  };
 }
 
-// Obtener información del contacto
+// Obtener información del contacto (cliente)
 async function getContactInfo(contactId: string | null): Promise<any | null> {
   if (!contactId) return null;
 
@@ -178,13 +209,31 @@ async function getContactInfo(contactId: string | null): Promise<any | null> {
     SELECT
       c.id,
       c.nombre,
+      c.apellido,
       c.email,
-      c.telefono
+      c.telefono,
+      c.whatsapp,
+      c.tipo_contacto,
+      c.fuente,
+      c.datos_extra
     FROM contactos c
     WHERE c.id = ${contactId}
   `;
 
-  return result[0] || null;
+  if (result.length === 0) return null;
+
+  const contact = result[0];
+  return {
+    id: contact.id,
+    nombre: contact.nombre,
+    apellido: contact.apellido,
+    nombre_completo: `${contact.nombre || ''} ${contact.apellido || ''}`.trim(),
+    email: contact.email,
+    telefono: contact.telefono,
+    whatsapp: contact.whatsapp,
+    tipo: contact.tipo_contacto,
+    fuente: contact.fuente
+  };
 }
 
 // Obtener reacciones de una propuesta
@@ -426,7 +475,7 @@ export async function handleProposals(request: Request): Promise<Response> {
       const [properties, reactions, advisor, contact] = await Promise.all([
         getProposalProperties(proposal.id),
         getProposalReactions(proposal.id),
-        getAdvisorInfo(proposal.usuario_creador_id),
+        getAdvisorInfo(proposal.usuario_creador_id, proposal.tenant_id),
         getContactInfo(proposal.contacto_id)
       ]);
 
@@ -449,14 +498,27 @@ export async function handleProposals(request: Request): Promise<Response> {
           properties: formattedProperties,
           reactions,
           advisor: advisor ? {
+            id: advisor.id,
+            codigo: advisor.codigo,
+            slug: advisor.slug,
             nombre: advisor.nombre,
+            apellido: advisor.apellido,
+            nombre_completo: advisor.nombre_completo,
             email: advisor.email,
             telefono: advisor.telefono,
-            foto: advisor.foto_url,
-            whatsapp: advisor.whatsapp
+            whatsapp: advisor.whatsapp,
+            foto: advisor.foto,
+            cargo: advisor.cargo,
+            bio: advisor.bio,
+            redes_sociales: advisor.redes_sociales
           } : null,
           contact: contact ? {
-            nombre: contact.nombre
+            id: contact.id,
+            nombre: contact.nombre,
+            apellido: contact.apellido,
+            nombre_completo: contact.nombre_completo,
+            email: contact.email,
+            telefono: contact.telefono
           } : null
         }
       }), { headers });
