@@ -221,35 +221,39 @@ async function getContactInfo(contactId: string | null): Promise<any | null> {
 
   const sql = getSQL();
 
-  const result = await sql`
-    SELECT
-      c.id,
-      c.nombre,
-      c.apellido,
-      c.email,
-      c.telefono,
-      c.whatsapp,
-      c.tipo_contacto,
-      c.fuente,
-      c.datos_extra
-    FROM contactos c
-    WHERE c.id = ${contactId}
-  `;
+  try {
+    const result = await sql`
+      SELECT
+        c.id,
+        c.nombre,
+        c.apellido,
+        c.email,
+        c.telefono,
+        c.whatsapp,
+        c.tipos_contacto,
+        c.fuente
+      FROM contactos c
+      WHERE c.id = ${contactId}
+    `;
 
-  if (result.length === 0) return null;
+    if (result.length === 0) return null;
 
-  const contact = result[0];
-  return {
-    id: contact.id,
-    nombre: contact.nombre,
-    apellido: contact.apellido,
-    nombre_completo: `${contact.nombre || ''} ${contact.apellido || ''}`.trim(),
-    email: contact.email,
-    telefono: contact.telefono,
-    whatsapp: contact.whatsapp,
-    tipo: contact.tipo_contacto,
-    fuente: contact.fuente
-  };
+    const contact = result[0];
+    return {
+      id: contact.id,
+      nombre: contact.nombre,
+      apellido: contact.apellido,
+      nombre_completo: `${contact.nombre || ''} ${contact.apellido || ''}`.trim(),
+      email: contact.email,
+      telefono: contact.telefono,
+      whatsapp: contact.whatsapp,
+      tipo: contact.tipos_contacto,
+      fuente: contact.fuente
+    };
+  } catch (error) {
+    console.error('[getContactInfo] Error:', error);
+    return null;
+  }
 }
 
 // Obtener reacciones de una propuesta
