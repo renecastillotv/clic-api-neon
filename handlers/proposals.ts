@@ -230,8 +230,8 @@ async function getContactInfo(contactId: string | null): Promise<any | null> {
         c.email,
         c.telefono,
         c.whatsapp,
-        c.tipos_contacto,
-        c.fuente
+        c.tipo,
+        c.origen
       FROM contactos c
       WHERE c.id = ${contactId}
     `;
@@ -247,8 +247,8 @@ async function getContactInfo(contactId: string | null): Promise<any | null> {
       email: contact.email,
       telefono: contact.telefono,
       whatsapp: contact.whatsapp,
-      tipo: contact.tipos_contacto,
-      fuente: contact.fuente
+      tipo: contact.tipo,
+      origen: contact.origen
     };
   } catch (error) {
     console.error('[getContactInfo] Error:', error);
