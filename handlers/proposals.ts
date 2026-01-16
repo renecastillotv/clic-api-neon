@@ -468,6 +468,7 @@ export async function handleProposals(request: Request): Promise<Response> {
     // GET /api/proposals/:urlPublica - Obtener propuesta por URL pública
     if (method === 'GET' && action && !['reaction', 'comment'].includes(action)) {
       const urlPublica = action;
+      const isPreview = url.searchParams.get('preview') === 'true';
       const proposal = await getProposalByUrl(urlPublica);
 
       if (!proposal) {
@@ -477,8 +478,8 @@ export async function handleProposals(request: Request): Promise<Response> {
         }), { status: 404, headers });
       }
 
-      // Verificar si ha expirado
-      if (proposal.fecha_expiracion) {
+      // Verificar si ha expirado (skip in preview mode)
+      if (!isPreview && proposal.fecha_expiracion) {
         const expDate = new Date(proposal.fecha_expiracion);
         if (expDate < new Date()) {
           return new Response(JSON.stringify({
@@ -488,8 +489,10 @@ export async function handleProposals(request: Request): Promise<Response> {
         }
       }
 
-      // Incrementar contador de vistas
-      await incrementViewCount(proposal.id);
+      // Incrementar contador de vistas (solo si no es preview)
+      if (!isPreview) {
+        await incrementViewCount(proposal.id);
+      }
 
       // Obtener propiedades, reacciones e información adicional
       const [properties, reactions, advisor, contact] = await Promise.all([
@@ -512,11 +515,12 @@ export async function handleProposals(request: Request): Promise<Response> {
           url_publica: proposal.url_publica,
           fecha_expiracion: proposal.fecha_expiracion,
           fecha_enviada: proposal.fecha_enviada,
-          veces_vista: proposal.veces_vista + 1, // +1 por la vista actual
+          veces_vista: isPreview ? proposal.veces_vista : proposal.veces_vista + 1,
           datos_extra: proposal.datos_extra,
           created_at: proposal.created_at,
           properties: formattedProperties,
           reactions,
+          isPreview, // Indica si está en modo preview (solo lectura)
           advisor: advisor ? {
             id: advisor.id,
             codigo: advisor.codigo,
