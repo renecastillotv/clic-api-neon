@@ -153,50 +153,65 @@ async function getAdvisorInfo(userId: string | null, tenantId: string): Promise<
 
   const sql = getSQL();
 
-  // Primero intentar obtener el perfil del asesor vinculado al usuario
-  const result = await sql`
-    SELECT
-      u.id as usuario_id,
-      pa.id as perfil_id,
-      pa.codigo,
-      pa.slug,
-      COALESCE(pa.nombre, u.nombre) as nombre,
-      COALESCE(pa.apellido, '') as apellido,
-      COALESCE(pa.email, u.email) as email,
-      COALESCE(pa.telefono_directo, pa.telefono, u.telefono) as telefono,
-      COALESCE(pa.whatsapp, pa.telefono_directo, pa.telefono) as whatsapp,
-      COALESCE(pa.foto, u.foto_url) as foto,
-      pa.cargo,
-      pa.bio,
-      pa.idiomas,
-      pa.especialidades,
-      pa.redes_sociales
-    FROM usuarios u
-    LEFT JOIN perfiles_asesor pa ON pa.usuario_id = u.id AND pa.tenant_id = ${tenantId}
-    WHERE u.id = ${userId}
-  `;
+  try {
+    // Primero intentar obtener el perfil del asesor vinculado al usuario
+    // Usamos solo columnas básicas de usuarios y las de perfiles_asesor
+    const result = await sql`
+      SELECT
+        u.id as usuario_id,
+        u.nombre as usuario_nombre,
+        u.email as usuario_email,
+        pa.id as perfil_id,
+        pa.codigo,
+        pa.slug,
+        pa.nombre as perfil_nombre,
+        pa.apellido,
+        pa.email as perfil_email,
+        pa.telefono,
+        pa.telefono_directo,
+        pa.whatsapp,
+        pa.foto,
+        pa.cargo,
+        pa.bio,
+        pa.idiomas,
+        pa.especialidades,
+        pa.redes_sociales
+      FROM usuarios u
+      LEFT JOIN perfiles_asesor pa ON pa.usuario_id = u.id AND pa.tenant_id = ${tenantId}
+      WHERE u.id = ${userId}
+    `;
 
-  if (result.length === 0) return null;
+    if (result.length === 0) return null;
 
-  const advisor = result[0];
-  return {
-    id: advisor.perfil_id || advisor.usuario_id,
-    usuario_id: advisor.usuario_id,
-    codigo: advisor.codigo,
-    slug: advisor.slug,
-    nombre: advisor.nombre,
-    apellido: advisor.apellido,
-    nombre_completo: `${advisor.nombre || ''} ${advisor.apellido || ''}`.trim(),
-    email: advisor.email,
-    telefono: advisor.telefono,
-    whatsapp: advisor.whatsapp,
-    foto: advisor.foto,
-    cargo: advisor.cargo || 'Asesor Inmobiliario',
-    bio: advisor.bio,
-    idiomas: advisor.idiomas,
-    especialidades: advisor.especialidades,
-    redes_sociales: advisor.redes_sociales
-  };
+    const row = result[0];
+    const nombre = row.perfil_nombre || row.usuario_nombre || '';
+    const apellido = row.apellido || '';
+    const email = row.perfil_email || row.usuario_email || '';
+    const telefono = row.telefono_directo || row.telefono || '';
+    const whatsapp = row.whatsapp || row.telefono_directo || row.telefono || '';
+
+    return {
+      id: row.perfil_id || row.usuario_id,
+      usuario_id: row.usuario_id,
+      codigo: row.codigo,
+      slug: row.slug,
+      nombre: nombre,
+      apellido: apellido,
+      nombre_completo: `${nombre} ${apellido}`.trim(),
+      email: email,
+      telefono: telefono,
+      whatsapp: whatsapp,
+      foto: row.foto,
+      cargo: row.cargo || 'Asesor Inmobiliario',
+      bio: row.bio,
+      idiomas: row.idiomas,
+      especialidades: row.especialidades,
+      redes_sociales: row.redes_sociales
+    };
+  } catch (error) {
+    console.error('[getAdvisorInfo] Error:', error);
+    return null;
+  }
 }
 
 // Obtener información del contacto (cliente)
