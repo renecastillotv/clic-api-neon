@@ -281,11 +281,9 @@ async function getPropertyReactions(listId: string, propertyId: string): Promise
 
 // Obtener resumen de reacciones por propiedad
 async function getReactionsSummary(listId: string): Promise<Record<string, {
-  likes: number;
-  dislikes: number;
-  comments: number;
-  likedBy: string[];
-  dislikedBy: string[];
+  likes: { visitor_device_id: string; visitor_alias: string }[];
+  dislikes: { visitor_device_id: string; visitor_alias: string }[];
+  comments: { visitor_device_id: string; visitor_alias: string; comment_text: string; created_at: string }[];
 }>> {
   const sql = getSQL();
 
@@ -293,9 +291,13 @@ async function getReactionsSummary(listId: string): Promise<Record<string, {
     SELECT
       property_id,
       reaction_type,
-      visitor_alias
+      visitor_device_id,
+      visitor_alias,
+      comment_text,
+      created_at
     FROM favorite_reactions
     WHERE list_id = ${listId}
+    ORDER BY created_at DESC
   `;
 
   const summary: Record<string, any> = {};
@@ -303,17 +305,24 @@ async function getReactionsSummary(listId: string): Promise<Record<string, {
   for (const row of result) {
     const propId = row.property_id as string;
     if (!summary[propId]) {
-      summary[propId] = { likes: 0, dislikes: 0, comments: 0, likedBy: [], dislikedBy: [] };
+      summary[propId] = { likes: [], dislikes: [], comments: [] };
     }
 
+    const reactionInfo = {
+      visitor_device_id: row.visitor_device_id,
+      visitor_alias: row.visitor_alias
+    };
+
     if (row.reaction_type === 'like') {
-      summary[propId].likes++;
-      summary[propId].likedBy.push(row.visitor_alias);
+      summary[propId].likes.push(reactionInfo);
     } else if (row.reaction_type === 'dislike') {
-      summary[propId].dislikes++;
-      summary[propId].dislikedBy.push(row.visitor_alias);
+      summary[propId].dislikes.push(reactionInfo);
     } else if (row.reaction_type === 'comment') {
-      summary[propId].comments++;
+      summary[propId].comments.push({
+        ...reactionInfo,
+        comment_text: row.comment_text,
+        created_at: row.created_at
+      });
     }
   }
 
@@ -391,7 +400,7 @@ export async function handleFavorites(request: Request): Promise<Response> {
         SELECT
           p.id,
           p.slug,
-          p.codigo,
+          p.codigo_publico,
           p.titulo,
           p.descripcion,
           p.short_description,
@@ -432,7 +441,7 @@ export async function handleFavorites(request: Request): Promise<Response> {
           // Identificadores
           id: prop.id,
           slug: prop.slug,
-          code: prop.codigo,
+          code: prop.codigo_publico,
 
           // Campos que espera FavoritesLayout
           titulo: prop.titulo,
