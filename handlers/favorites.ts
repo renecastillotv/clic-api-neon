@@ -419,33 +419,66 @@ export async function handleFavorites(request: Request): Promise<Response> {
         ORDER BY p.created_at DESC
       `;
 
-      // Formatear propiedades para el frontend
-      const formattedProperties = properties.map((prop: any) => ({
-        id: prop.id,
-        slug: prop.slug,
-        code: prop.codigo,
-        title: prop.titulo,
-        description: prop.short_description || prop.descripcion,
-        type: prop.tipo,
-        operation: prop.operacion,
-        price: prop.precio_venta || prop.precio_alquiler || prop.precio,
-        currency: prop.moneda || 'USD',
-        city: prop.ciudad,
-        sector: prop.sector,
-        province: prop.provincia,
-        bedrooms: prop.habitaciones,
-        bathrooms: prop.banos,
-        parking: prop.estacionamientos,
-        builtArea: prop.m2_construccion,
-        landArea: prop.m2_terreno,
-        mainImage: prop.imagen_principal,
-        images: prop.imagenes,
-        isProject: prop.is_project,
-        createdAt: prop.created_at,
-        // Campos adicionales para compatibilidad con el frontend
-        location: `${prop.sector || ''}, ${prop.ciudad || ''}`.replace(/^, |, $/g, ''),
-        url: `/${prop.operacion === 'alquiler' ? 'alquilar' : 'comprar'}/${prop.slug}`
-      }));
+      // Formatear propiedades para el frontend (nombres compatibles con FavoritesLayout)
+      const formattedProperties = properties.map((prop: any) => {
+        // Formatear precio
+        const precio = prop.precio_venta || prop.precio_alquiler || prop.precio || 0;
+        const moneda = prop.moneda || 'USD';
+        const precioFormateado = precio > 0
+          ? `${moneda === 'USD' ? 'US$' : 'RD$'}${precio.toLocaleString()}`
+          : 'Precio a consultar';
+
+        return {
+          // Identificadores
+          id: prop.id,
+          slug: prop.slug,
+          code: prop.codigo,
+
+          // Campos que espera FavoritesLayout
+          titulo: prop.titulo,
+          name: prop.titulo,
+          tipo: prop.tipo,
+          sector: prop.sector,
+          ciudad: prop.ciudad,
+          provincia: prop.provincia,
+
+          // Precio formateado como espera el frontend
+          precio: precioFormateado,
+          precios: {
+            venta: prop.precio_venta ? {
+              valor: prop.precio_venta,
+              formateado: `${moneda === 'USD' ? 'US$' : 'RD$'}${prop.precio_venta.toLocaleString()}`
+            } : null,
+            alquiler: prop.precio_alquiler ? {
+              valor: prop.precio_alquiler,
+              formateado: `${moneda === 'USD' ? 'US$' : 'RD$'}${prop.precio_alquiler.toLocaleString()}`
+            } : null
+          },
+
+          // Características
+          habitaciones: prop.habitaciones || 0,
+          banos: prop.banos || 0,
+          estacionamientos: prop.estacionamientos || 0,
+          metros: prop.m2_construccion || 0,
+          metros_construidos: prop.m2_construccion || 0,
+          metros_terreno: prop.m2_terreno || 0,
+
+          // Imágenes
+          imagen: prop.imagen_principal,
+          imagenes: prop.imagenes || [],
+
+          // Metadatos
+          is_project: prop.is_project || false,
+          operacion: prop.operacion,
+          estado: 'disponible',
+
+          // URL de la propiedad
+          url: `/${prop.operacion === 'alquiler' ? 'alquilar' : 'comprar'}/${prop.slug}`,
+
+          // Fecha de creación
+          created_at: prop.created_at
+        };
+      });
 
       return new Response(JSON.stringify({
         success: true,
