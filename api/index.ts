@@ -14,6 +14,7 @@ import articlesHandler from '../handlers/articles';
 import videosHandler from '../handlers/videos';
 import sellHandler from '../handlers/sell';
 import favoritesHandler from '../handlers/favorites';
+import proposalsHandler from '../handlers/proposals';
 
 import type { TenantConfig, ApiResponse, Error404Response } from '../types';
 
@@ -41,6 +42,7 @@ const SPECIAL_ROUTES: Record<string, Record<string, string>> = {
   es: {
     asesores: 'advisors',
     favoritos: 'favorites',
+    propuestas: 'proposals',
     testimonios: 'testimonials',
     videos: 'videos',
     articulos: 'articles',
@@ -58,6 +60,7 @@ const SPECIAL_ROUTES: Record<string, Record<string, string>> = {
   en: {
     advisors: 'advisors',
     favorites: 'favorites',
+    proposals: 'proposals',
     testimonials: 'testimonials',
     videos: 'videos',
     articles: 'articles',
@@ -75,6 +78,7 @@ const SPECIAL_ROUTES: Record<string, Record<string, string>> = {
   fr: {
     conseillers: 'advisors',
     favoris: 'favorites',
+    propositions: 'proposals',
     temoignages: 'testimonials',
     videos: 'videos',
     articles: 'articles',
@@ -118,6 +122,13 @@ export default async function handler(request: Request): Promise<Response> {
       console.log(`[API] Favorites route: ${pathname}`);
       return favoritesHandler.handleFavorites(request);
     }
+
+    // Ruta de propuestas: /api/proposals/*
+    if (pathname.startsWith('/api/proposals') || pathname.startsWith('/proposals')) {
+      console.log(`[API] Proposals route: ${pathname}`);
+      return proposalsHandler.handleProposals(request);
+    }
+
     const searchParams = url.searchParams;
 
     // Extraer domain del header o query param
@@ -336,6 +347,25 @@ export default async function handler(request: Request): Promise<Response> {
             trackingString,
           } as any;
         }
+        break;
+
+      case 'proposals':
+        // Propuestas del CRM: /propuestas/:token, /proposals/:token, /propositions/:token
+        const proposalToken = segments[1]; // El token de la propuesta
+
+        response = {
+          type: 'proposal',
+          language,
+          tenant,
+          seo: utils.generateSEO({
+            title: language === 'en' ? 'Property Proposal' : language === 'fr' ? 'Proposition Immobilière' : 'Propuesta de Propiedades',
+            description: language === 'en' ? 'View your personalized property selection' : language === 'fr' ? 'Voir votre sélection personnalisée' : 'Ve tu selección personalizada de propiedades',
+            language,
+          }),
+          trackingString,
+          proposalToken, // El frontend usará esto para cargar la propuesta
+          originalUrl: pathname,
+        } as any;
         break;
 
       case 'contact':
