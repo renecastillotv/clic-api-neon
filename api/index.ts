@@ -13,6 +13,7 @@ import homepageHandler from '../handlers/homepage';
 import articlesHandler from '../handlers/articles';
 import videosHandler from '../handlers/videos';
 import sellHandler from '../handlers/sell';
+import favoritesHandler from '../handlers/favorites';
 
 import type { TenantConfig, ApiResponse, Error404Response } from '../types';
 
@@ -107,6 +108,16 @@ export default async function handler(request: Request): Promise<Response> {
   try {
     const url = new URL(request.url);
     const pathname = url.pathname;
+
+    // ========================================================================
+    // RUTAS DIRECTAS DE API (sin tenant)
+    // ========================================================================
+
+    // Ruta de favoritos: /api/favorites/*
+    if (pathname.startsWith('/api/favorites') || pathname.startsWith('/favorites')) {
+      console.log(`[API] Favorites route: ${pathname}`);
+      return favoritesHandler.handleFavorites(request);
+    }
     const searchParams = url.searchParams;
 
     // Extraer domain del header o query param
