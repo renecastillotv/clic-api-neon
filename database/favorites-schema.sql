@@ -6,12 +6,19 @@
 -- 1. Tabla principal: Listas de favoritos por dispositivo
 CREATE TABLE IF NOT EXISTS device_favorites (
   id BIGSERIAL PRIMARY KEY,
-  device_id TEXT NOT NULL UNIQUE,  -- ID único del dispositivo/navegador
+  device_id TEXT NOT NULL UNIQUE,  -- ID único del dispositivo/navegador (interno)
+  public_code TEXT UNIQUE,  -- Código público amigable (ej: CLIC-1234)
   owner_name TEXT,  -- Nombre del dueño de la lista (opcional)
+  owner_email TEXT,  -- Email del dueño para recuperar la lista
   property_ids TEXT[] DEFAULT '{}',  -- Array de IDs de propiedades
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+
+-- Índice para buscar por email
+CREATE INDEX IF NOT EXISTS idx_device_favorites_email ON device_favorites(owner_email);
+-- Índice para buscar por código público
+CREATE INDEX IF NOT EXISTS idx_device_favorites_public_code ON device_favorites(public_code);
 
 -- 2. Tabla de visitantes de listas compartidas
 CREATE TABLE IF NOT EXISTS favorite_visitors (

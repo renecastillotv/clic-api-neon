@@ -9,7 +9,9 @@ import { getSQL } from '../lib/db';
 
 interface FavoritesList {
   device_id: string;
+  public_code?: string;
   owner_name?: string;
+  owner_email?: string;
   property_ids: string[];
   created_at: string;
   updated_at: string;
@@ -39,6 +41,31 @@ interface Reaction {
 // FUNCIONES DE BASE DE DATOS
 // ============================================================================
 
+// Generar código público único (CLIC-XXXX)
+async function generatePublicCode(): Promise<string> {
+  const sql = getSQL();
+  let code: string;
+  let attempts = 0;
+
+  do {
+    const randomNum = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
+    code = `CLIC-${randomNum}`;
+
+    // Verificar que no existe
+    const existing = await sql`
+      SELECT 1 FROM device_favorites WHERE public_code = ${code}
+    `;
+
+    if (existing.length === 0) {
+      return code;
+    }
+    attempts++;
+  } while (attempts < 10);
+
+  // Si después de 10 intentos no encontramos uno único, usar timestamp
+  return `CLIC-${Date.now().toString().slice(-6)}`;
+}
+
 // Obtener o crear lista de favoritos por device_id
 async function getOrCreateFavoritesList(deviceId: string): Promise<FavoritesList> {
   const sql = getSQL();
@@ -52,10 +79,13 @@ async function getOrCreateFavoritesList(deviceId: string): Promise<FavoritesList
     return existing[0] as FavoritesList;
   }
 
+  // Generar código público para nueva lista
+  const publicCode = await generatePublicCode();
+
   // Crear nueva
   const created = await sql`
-    INSERT INTO device_favorites (device_id, property_ids)
-    VALUES (${deviceId}, '{}')
+    INSERT INTO device_favorites (device_id, public_code, property_ids)
+    VALUES (${deviceId}, ${publicCode}, '{}')
     RETURNING *
   `;
 
@@ -90,12 +120,22 @@ async function updateFavorites(deviceId: string, propertyIds: string[], ownerNam
 }
 
 // Agregar propiedad a favoritos
-async function addToFavorites(deviceId: string, propertyId: string): Promise<FavoritesList> {
+async function addToFavorites(deviceId: string, propertyId: string): Promise<{ list: FavoritesList; isNewList: boolean }> {
   const sql = getSQL();
 
+  // Verificar si ya existe la lista
+  const existing = await sql`SELECT 1 FROM device_favorites WHERE device_id = ${deviceId}`;
+  const isNewList = existing.length === 0;
+
+  // Si es nueva lista, generar código público
+  let publicCode: string | null = null;
+  if (isNewList) {
+    publicCode = await generatePublicCode();
+  }
+
   const result = await sql`
-    INSERT INTO device_favorites (device_id, property_ids)
-    VALUES (${deviceId}, ARRAY[${propertyId}])
+    INSERT INTO device_favorites (device_id, property_ids, public_code)
+    VALUES (${deviceId}, ARRAY[${propertyId}], ${publicCode})
     ON CONFLICT (device_id)
     DO UPDATE SET
       property_ids = array_append(
@@ -106,7 +146,7 @@ async function addToFavorites(deviceId: string, propertyId: string): Promise<Fav
     RETURNING *
   `;
 
-  return result[0] as FavoritesList;
+  return { list: result[0] as FavoritesList, isNewList };
 }
 
 // Quitar propiedad de favoritos
@@ -118,6 +158,82 @@ async function removeFromFavorites(deviceId: string, propertyId: string): Promis
     SET property_ids = array_remove(property_ids, ${propertyId}),
         updated_at = NOW()
     WHERE device_id = ${deviceId}
+    RETURNING *
+  `;
+
+  return result[0] as FavoritesList;
+}
+
+// Vincular email a una lista de favoritos
+async function linkEmail(deviceId: string, email: string, ownerName?: string): Promise<FavoritesList> {
+  const sql = getSQL();
+
+  const result = await sql`
+    UPDATE device_favorites
+    SET owner_email = ${email.toLowerCase()},
+        owner_name = COALESCE(${ownerName || null}, owner_name),
+        updated_at = NOW()
+    WHERE device_id = ${deviceId}
+    RETURNING *
+  `;
+
+  if (result.length === 0) {
+    throw new Error('Lista no encontrada');
+  }
+
+  return result[0] as FavoritesList;
+}
+
+// Buscar lista por email (para recuperación)
+async function findByEmail(email: string): Promise<FavoritesList | null> {
+  const sql = getSQL();
+
+  const result = await sql`
+    SELECT * FROM device_favorites
+    WHERE owner_email = ${email.toLowerCase()}
+    ORDER BY updated_at DESC
+    LIMIT 1
+  `;
+
+  return result[0] as FavoritesList || null;
+}
+
+// Buscar lista por código público
+async function findByPublicCode(publicCode: string): Promise<FavoritesList | null> {
+  const sql = getSQL();
+
+  const result = await sql`
+    SELECT * FROM device_favorites
+    WHERE public_code = ${publicCode.toUpperCase()}
+  `;
+
+  return result[0] as FavoritesList || null;
+}
+
+// Transferir favoritos de una lista a otra (para recuperación)
+async function transferFavorites(fromDeviceId: string, toDeviceId: string): Promise<FavoritesList> {
+  const sql = getSQL();
+
+  // Obtener lista origen
+  const fromList = await getFavoritesList(fromDeviceId);
+  if (!fromList) {
+    throw new Error('Lista origen no encontrada');
+  }
+
+  // Obtener o crear lista destino
+  const toList = await getOrCreateFavoritesList(toDeviceId);
+
+  // Combinar property_ids sin duplicados
+  const combinedIds = [...new Set([...toList.property_ids, ...fromList.property_ids])];
+
+  // Actualizar lista destino
+  const result = await sql`
+    UPDATE device_favorites
+    SET property_ids = ${combinedIds},
+        owner_name = COALESCE(${fromList.owner_name}, device_favorites.owner_name),
+        owner_email = COALESCE(${fromList.owner_email}, device_favorites.owner_email),
+        updated_at = NOW()
+    WHERE device_id = ${toDeviceId}
     RETURNING *
   `;
 
@@ -525,9 +641,16 @@ export async function handleFavorites(request: Request): Promise<Response> {
         });
       }
 
-      const list = await addToFavorites(device_id, property_id);
+      const { list, isNewList } = await addToFavorites(device_id, property_id);
 
-      return new Response(JSON.stringify({ success: true, data: list }), { headers });
+      return new Response(JSON.stringify({
+        success: true,
+        data: list,
+        isNewList,  // El frontend puede usar esto para mostrar el modal de bienvenida
+        message: isNewList
+          ? 'Lista de favoritos creada. Vincula tu email para no perderla.'
+          : 'Propiedad agregada a favoritos'
+      }), { headers });
     }
 
     // POST /api/favorites/remove - Quitar de favoritos
@@ -660,6 +783,156 @@ export async function handleFavorites(request: Request): Promise<Response> {
       const summary = await getReactionsSummary(listId);
 
       return new Response(JSON.stringify({ success: true, data: summary }), { headers });
+    }
+
+    // POST /api/favorites/link-email - Vincular email a una lista
+    if (method === 'POST' && action === 'link-email') {
+      const body = await request.json();
+      const { device_id, email, owner_name } = body;
+
+      if (!device_id || !email) {
+        return new Response(JSON.stringify({ success: false, error: 'device_id y email son requeridos' }), {
+          status: 400, headers
+        });
+      }
+
+      // Validar formato de email
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email)) {
+        return new Response(JSON.stringify({ success: false, error: 'Formato de email inválido' }), {
+          status: 400, headers
+        });
+      }
+
+      // Verificar si el email ya está vinculado a otra lista
+      const existingList = await findByEmail(email);
+      if (existingList && existingList.device_id !== device_id) {
+        return new Response(JSON.stringify({
+          success: false,
+          error: 'Este email ya está vinculado a otra lista de favoritos',
+          existing_list: {
+            public_code: existingList.public_code,
+            property_count: existingList.property_ids?.length || 0
+          }
+        }), { status: 409, headers });
+      }
+
+      const list = await linkEmail(device_id, email, owner_name);
+
+      return new Response(JSON.stringify({
+        success: true,
+        data: list,
+        message: 'Email vinculado correctamente'
+      }), { headers });
+    }
+
+    // POST /api/favorites/recover - Recuperar lista por email o código público
+    if (method === 'POST' && action === 'recover') {
+      const body = await request.json();
+      const { current_device_id, email, public_code } = body;
+
+      if (!current_device_id) {
+        return new Response(JSON.stringify({ success: false, error: 'current_device_id es requerido' }), {
+          status: 400, headers
+        });
+      }
+
+      if (!email && !public_code) {
+        return new Response(JSON.stringify({ success: false, error: 'email o public_code es requerido' }), {
+          status: 400, headers
+        });
+      }
+
+      // Buscar la lista a recuperar
+      let listToRecover: FavoritesList | null = null;
+
+      if (email) {
+        listToRecover = await findByEmail(email);
+      } else if (public_code) {
+        listToRecover = await findByPublicCode(public_code);
+      }
+
+      if (!listToRecover) {
+        return new Response(JSON.stringify({
+          success: false,
+          error: email
+            ? 'No se encontró ninguna lista vinculada a este email'
+            : 'Código de lista no encontrado'
+        }), { status: 404, headers });
+      }
+
+      // Si la lista encontrada es del mismo dispositivo, solo retornarla
+      if (listToRecover.device_id === current_device_id) {
+        return new Response(JSON.stringify({
+          success: true,
+          data: listToRecover,
+          message: 'Ya tienes acceso a esta lista'
+        }), { headers });
+      }
+
+      // Transferir favoritos a la lista actual
+      const mergedList = await transferFavorites(listToRecover.device_id, current_device_id);
+
+      return new Response(JSON.stringify({
+        success: true,
+        data: mergedList,
+        recovered_from: {
+          device_id: listToRecover.device_id,
+          public_code: listToRecover.public_code,
+          property_count: listToRecover.property_ids?.length || 0
+        },
+        message: 'Lista recuperada y fusionada correctamente'
+      }), { headers });
+    }
+
+    // GET /api/favorites/find-by-email/:email - Buscar lista por email (sin transferir)
+    if (method === 'GET' && action === 'find-by-email' && pathParts[3]) {
+      const email = decodeURIComponent(pathParts[3]);
+
+      const list = await findByEmail(email);
+
+      if (!list) {
+        return new Response(JSON.stringify({
+          success: false,
+          error: 'No se encontró ninguna lista vinculada a este email'
+        }), { status: 404, headers });
+      }
+
+      // Retornar solo información pública (no el device_id completo)
+      return new Response(JSON.stringify({
+        success: true,
+        data: {
+          public_code: list.public_code,
+          owner_name: list.owner_name,
+          property_count: list.property_ids?.length || 0,
+          created_at: list.created_at
+        }
+      }), { headers });
+    }
+
+    // GET /api/favorites/find-by-code/:code - Buscar lista por código público
+    if (method === 'GET' && action === 'find-by-code' && pathParts[3]) {
+      const publicCode = pathParts[3].toUpperCase();
+
+      const list = await findByPublicCode(publicCode);
+
+      if (!list) {
+        return new Response(JSON.stringify({
+          success: false,
+          error: 'Código de lista no encontrado'
+        }), { status: 404, headers });
+      }
+
+      // Retornar información pública
+      return new Response(JSON.stringify({
+        success: true,
+        data: {
+          public_code: list.public_code,
+          owner_name: list.owner_name,
+          property_count: list.property_ids?.length || 0,
+          created_at: list.created_at
+        }
+      }), { headers });
     }
 
     // Ruta no encontrada
