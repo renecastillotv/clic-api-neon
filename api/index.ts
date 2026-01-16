@@ -300,18 +300,42 @@ export default async function handler(request: Request): Promise<Response> {
         break;
 
       case 'favorites':
-        // TODO: Implementar handler de favoritos
-        response = {
-          type: 'favorites-main',
-          language,
-          tenant,
-          seo: utils.generateSEO({
-            title: 'Mis Favoritos',
-            description: 'Tus propiedades guardadas',
+        // Detectar si es vista compartida: /favoritos/compartir, /favorites/share, /favoris/partager
+        const favoritesSubroute = segments[1];
+        const isSharedView = favoritesSubroute === 'compartir' ||
+                             favoritesSubroute === 'share' ||
+                             favoritesSubroute === 'partager';
+
+        if (isSharedView) {
+          // Vista compartida - el ID se pasa como query param ?id=XXX
+          response = {
+            type: 'favorites-shared',
             language,
-          }),
-          trackingString,
-        } as any;
+            tenant,
+            seo: utils.generateSEO({
+              title: language === 'en' ? 'Shared Favorites' : language === 'fr' ? 'Favoris Partagés' : 'Favoritos Compartidos',
+              description: language === 'en' ? 'View shared favorites list' : language === 'fr' ? 'Voir la liste des favoris partagés' : 'Ver lista de favoritos compartidos',
+              language,
+            }),
+            trackingString,
+            // Pasar query params para que el frontend pueda acceder al ID
+            queryParams: Object.fromEntries(searchParams.entries()),
+            originalUrl: pathname,
+          } as any;
+        } else {
+          // Vista principal de favoritos del usuario
+          response = {
+            type: 'favorites-main',
+            language,
+            tenant,
+            seo: utils.generateSEO({
+              title: language === 'en' ? 'My Favorites' : language === 'fr' ? 'Mes Favoris' : 'Mis Favoritos',
+              description: language === 'en' ? 'Your saved properties' : language === 'fr' ? 'Vos propriétés enregistrées' : 'Tus propiedades guardadas',
+              language,
+            }),
+            trackingString,
+          } as any;
+        }
         break;
 
       case 'contact':
