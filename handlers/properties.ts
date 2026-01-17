@@ -361,18 +361,28 @@ export async function handleSingleProperty(options: {
   const similarProperties = similarPropertiesArray.map((p: any) => {
     const price = p.precio_venta || p.precio_alquiler || 0;
     const currency = p.moneda || 'USD';
+    const operationType = p.precio_venta ? 'venta' : 'alquiler';
+    const operationDisplay = language === 'en' ? (operationType === 'venta' ? 'Sale' : 'Rent') :
+                             language === 'fr' ? (operationType === 'venta' ? 'Vente' : 'Location') :
+                             (operationType === 'venta' ? 'Venta' : 'Alquiler');
     return {
       id: p.id,
       title: p.titulo,
       title_display: p.titulo,
-      price: utils.formatPrice(price, currency, p.precio_venta ? 'venta' : 'alquiler', language),
-      price_display: utils.formatPrice(price, currency, p.precio_venta ? 'venta' : 'alquiler', language),
+      price: utils.formatPrice(price, currency, operationType, language),
+      price_display: utils.formatPrice(price, currency, operationType, language),
+      operation_display: operationDisplay,
       bedrooms: p.habitaciones || 0,
       bathrooms: p.banos || 0,
       area: p.m2_construccion || 0,
+      built_area: p.m2_construccion || 0,
+      // Incluir ambos campos para compatibilidad con el frontend
       image: p.imagen_principal || '',
+      main_image_url: p.imagen_principal || '',
       location: `${p.sector || ''}, ${p.ciudad || ''}`.replace(/^, |, $/g, '') || 'Ubicación no especificada',
+      location_display: `${p.sector || ''}, ${p.ciudad || ''}`.replace(/^, |, $/g, '') || '',
       type: p.tipo || 'Propiedad',
+      category_display: p.tipo || 'Propiedad',
       url: `/${p.slug}`,
       is_project: p.is_project || false
     };
