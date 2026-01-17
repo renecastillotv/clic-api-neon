@@ -15,6 +15,7 @@ import videosHandler from '../handlers/videos';
 import sellHandler from '../handlers/sell';
 import favoritesHandler from '../handlers/favorites';
 import proposalsHandler from '../handlers/proposals';
+import contactHandler from '../handlers/contact';
 
 import type { TenantConfig, ApiResponse, Error404Response } from '../types';
 
@@ -372,19 +373,12 @@ export default async function handler(request: Request): Promise<Response> {
         break;
 
       case 'contact':
-        // TODO: Implementar handler de contacto
-        response = {
-          type: 'contact',
-          language,
+        // Handler de contacto con asesores reales y coordenadas de oficina
+        response = await contactHandler.handleContact({
           tenant,
-          seo: utils.generateSEO({
-            title: 'Contacto',
-            description: 'Contáctanos',
-            language,
-            canonicalUrl: pathname,
-          }),
+          language,
           trackingString,
-        } as any;
+        });
         break;
 
       case 'sell':
