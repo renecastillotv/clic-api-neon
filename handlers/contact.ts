@@ -133,10 +133,11 @@ export async function handleContact(params: ContactHandlerParams) {
         city: 'Santo Domingo, República Dominicana',
         phone: tenant.contact?.phone || '+1 809 487 2542',
         // Coordenadas exactas de "The Box Working Space" en Santo Domingo
-        // Calle Erik Leonard Ekman #34, Gazcue
+        // Calle Erik Leonard Ekman #34, Viejo Arroyo Hondo
+        // Verificadas en Google Maps: https://www.google.com/maps/place/The+Box+Working+Space
         coordinates: {
-          lat: 18.4671,
-          lng: -69.9167
+          lat: 18.4958553,
+          lng: -69.9454147
         }
       }
     ],
