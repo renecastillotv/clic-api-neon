@@ -124,8 +124,9 @@ export async function handlePropertyList(options: {
   page: number;
   limit: number;
   searchParams: URLSearchParams;
+  pathname: string;
 }): Promise<any> {
-  const { tenant, tags, language, trackingString, page, limit, searchParams } = options;
+  const { tenant, tags, language, trackingString, page, limit, searchParams, pathname } = options;
 
   // Parsear filtros desde tags y query params
   const filters = parseFiltersFromTags(tags, searchParams);
@@ -151,8 +152,8 @@ export async function handlePropertyList(options: {
   // Generar breadcrumbs
   const breadcrumbs = generateBreadcrumbs(tags, filters, language);
 
-  // Generar SEO
-  const seo = generateListSEO(filters, language, tenant, pagination.total_items);
+  // Generar SEO con hreflang
+  const seo = generateListSEO(filters, language, tenant, pagination.total_items, pathname);
 
   // Obtener contenido relacionado
   const [faqs, testimonials] = await Promise.all([
@@ -1078,7 +1079,7 @@ function generatePropertyBreadcrumbs(prop: any, language: string): Breadcrumb[] 
   return breadcrumbs;
 }
 
-function generateListSEO(filters: Record<string, any>, language: string, tenant: TenantConfig, total: number): any {
+function generateListSEO(filters: Record<string, any>, language: string, tenant: TenantConfig, total: number, pathname: string): any {
   const parts: string[] = [];
 
   if (filters.tipo) {
@@ -1105,6 +1106,7 @@ function generateListSEO(filters: Record<string, any>, language: string, tenant:
     description,
     h1: parts.join(' '),
     keywords: parts.map(p => p.toLowerCase()).join(', ') + ', inmobiliaria, bienes raíces',
+    hreflang: utils.generateHreflangUrls(pathname),
     og: {
       title,
       description,
@@ -1129,11 +1131,15 @@ function generatePropertySEO(prop: any, language: string, tenant: TenantConfig):
     ? prop.descripcion.replace(/<[^>]*>/g, '').substring(0, 155)
     : `${title} en ${location}. ${prop.habitaciones || 0} hab, ${prop.banos || 0} baños. ${price}`;
 
+  // Construir el basePath para hreflang usando el slug de la propiedad
+  const basePath = prop.slug_url ? `/propiedades/${prop.slug_url}` : null;
+
   return {
     title: seoTitle,
     description,
     h1: title,
     keywords: `${title}, ${location}, ${prop.tipo || 'propiedad'}, inmobiliaria`.toLowerCase(),
+    hreflang: basePath ? utils.generateHreflangUrls(basePath) : undefined,
     og: {
       title: seoTitle,
       description,

@@ -650,20 +650,22 @@ function generateHomepageSEO(tenant: TenantConfig, language: string): any {
 
   const title = titles[language as keyof typeof titles] || titles.es;
   const description = descriptions[language as keyof typeof descriptions] || descriptions.es;
-  const baseUrl = tenant.domains?.[0] ? `https://${tenant.domains[0]}` : 'https://clic.do';
-  const canonicalUrl = language === 'es' ? baseUrl : `${baseUrl}/${language}`;
+
+  // URLs relativas para hreflang - el dominio lo maneja el frontend
+  // Esto permite que funcione en cualquier dominio (localhost, clic.do, etc.)
+  const canonicalPath = language === 'es' ? '/' : `/${language}`;
 
   return {
     title,
     description,
     h1: title,
     keywords: 'bienes raíces, propiedades, casas, apartamentos, venta, alquiler, inmobiliaria, República Dominicana, Punta Cana, Santo Domingo',
-    canonical_url: canonicalUrl,
+    canonical_url: canonicalPath,
     open_graph: {
       title,
       description,
       type: 'website',
-      url: canonicalUrl,
+      url: canonicalPath,
       site_name: tenant.name,
       locale: language === 'es' ? 'es_DO' : language === 'en' ? 'en_US' : 'fr_FR',
       image: 'https://images.unsplash.com/photo-1600047509807-ba8f99d2cdde?w=1200&h=630&fit=crop&auto=format&q=80'
@@ -681,18 +683,19 @@ function generateHomepageSEO(tenant: TenantConfig, language: string): any {
       publisher: tenant.name,
       robots: 'index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1'
     },
+    // URLs relativas para cambio de idioma (funciona en cualquier dominio)
     hreflang: {
-      es: baseUrl,
-      en: `${baseUrl}/en`,
-      fr: `${baseUrl}/fr`,
-      'x-default': baseUrl
+      es: '/',
+      en: '/en',
+      fr: '/fr',
+      'x-default': '/'
     },
     structured_data: {
       '@context': 'https://schema.org',
       '@type': 'RealEstateAgent',
       name: tenant.name,
       description,
-      url: canonicalUrl
+      url: canonicalPath
     }
   };
 }

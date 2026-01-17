@@ -429,20 +429,24 @@ function generateAdvisorsListSEO(
     fr: `Découvrez notre équipe de ${total} conseillers immobiliers professionnels. Des experts prêts à vous aider.`
   };
 
-  const slugs = {
-    es: 'asesores',
-    en: 'advisors',
-    fr: 'conseillers'
-  };
+  // Generar hreflang usando el mapa de traducciones
+  const hreflang = utils.generateHreflangUrls('/asesores');
+  const canonicalUrl = hreflang[language as keyof typeof hreflang] || hreflang.es;
 
-  return utils.generateSEO({
+  const seo = utils.generateSEO({
     title: `${titles[language as keyof typeof titles]} | ${tenant.name}`,
     description: descriptions[language as keyof typeof descriptions],
     keywords: 'asesores inmobiliarios, agentes de bienes raíces, expertos inmobiliarios',
-    canonicalUrl: utils.buildUrl(`/${slugs[language as keyof typeof slugs]}`, language),
+    canonicalUrl,
     language,
     siteName: tenant.name
   });
+
+  // Sobrescribir hreflang con URLs traducidas
+  return {
+    ...seo,
+    hreflang
+  };
 }
 
 function generateSingleAdvisorSEO(
@@ -472,15 +476,26 @@ function generateSingleAdvisorSEO(
       : `${advisor.full_name}, conseiller immobilier avec ${propertiesCount} propriétés actives.`
   };
 
-  return utils.generateSEO({
+  // Generar hreflang con URLs traducidas para el asesor individual
+  const advisorSlug = advisor.slug;
+  const hreflang = utils.generateHreflangUrls(`/asesores/${advisorSlug}`);
+  const canonicalUrl = hreflang[language as keyof typeof hreflang] || hreflang.es;
+
+  const seo = utils.generateSEO({
     title: `${titles[language as keyof typeof titles]} | ${tenant.name}`,
     description: descriptions[language as keyof typeof descriptions],
     keywords: `${advisor.full_name}, asesor inmobiliario`,
-    canonicalUrl: advisor.url,
+    canonicalUrl,
     ogImage: advisor.photo_url,
     language,
     siteName: tenant.name
   });
+
+  // Sobrescribir hreflang con URLs traducidas
+  return {
+    ...seo,
+    hreflang
+  };
 }
 
 export default {

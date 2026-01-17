@@ -202,6 +202,7 @@ export default async function handler(request: Request): Promise<Response> {
           page,
           limit,
           searchParams,
+          pathname,
         });
         break;
 
@@ -327,6 +328,7 @@ export default async function handler(request: Request): Promise<Response> {
               title: language === 'en' ? 'Shared Favorites' : language === 'fr' ? 'Favoris Partagés' : 'Favoritos Compartidos',
               description: language === 'en' ? 'View shared favorites list' : language === 'fr' ? 'Voir la liste des favoris partagés' : 'Ver lista de favoritos compartidos',
               language,
+              canonicalUrl: pathname, // Para generar hreflang correcto
             }),
             trackingString,
             // Pasar query params para que el frontend pueda acceder al ID
@@ -343,6 +345,7 @@ export default async function handler(request: Request): Promise<Response> {
               title: language === 'en' ? 'My Favorites' : language === 'fr' ? 'Mes Favoris' : 'Mis Favoritos',
               description: language === 'en' ? 'Your saved properties' : language === 'fr' ? 'Vos propriétés enregistrées' : 'Tus propiedades guardadas',
               language,
+              canonicalUrl: pathname, // Para generar hreflang correcto
             }),
             trackingString,
           } as any;
@@ -378,6 +381,7 @@ export default async function handler(request: Request): Promise<Response> {
             title: 'Contacto',
             description: 'Contáctanos',
             language,
+            canonicalUrl: pathname,
           }),
           trackingString,
         } as any;
@@ -402,6 +406,7 @@ export default async function handler(request: Request): Promise<Response> {
             title: 'Rentas Vacacionales',
             description: 'Propiedades para alquiler vacacional',
             language,
+            canonicalUrl: pathname,
           }),
           trackingString,
         } as any;
@@ -417,6 +422,7 @@ export default async function handler(request: Request): Promise<Response> {
             title: 'Listados Curados',
             description: 'Colecciones especiales de propiedades',
             language,
+            canonicalUrl: pathname,
           }),
           trackingString,
         } as any;
@@ -432,6 +438,7 @@ export default async function handler(request: Request): Promise<Response> {
             title: 'Ubicaciones',
             description: 'Explora propiedades por ubicación',
             language,
+            canonicalUrl: pathname,
           }),
           trackingString,
         } as any;
@@ -447,6 +454,7 @@ export default async function handler(request: Request): Promise<Response> {
             title: 'Tipos de Propiedad',
             description: 'Explora propiedades por tipo',
             language,
+            canonicalUrl: pathname,
           }),
           trackingString,
         } as any;
@@ -463,6 +471,7 @@ export default async function handler(request: Request): Promise<Response> {
             title: routeType === 'legal-terms' ? 'Términos y Condiciones' : 'Política de Privacidad',
             description: routeType === 'legal-terms' ? 'Términos de uso del sitio' : 'Política de privacidad',
             language,
+            canonicalUrl: pathname,
           }),
           trackingString,
           legalType: routeType === 'legal-terms' ? 'terms' : 'privacy',
@@ -476,8 +485,8 @@ export default async function handler(request: Request): Promise<Response> {
     const duration = Date.now() - startTime;
     console.log(`[API] Response in ${duration}ms | type: ${response.type}`);
 
-    // Enriquecer respuesta con globalConfig y country
-    const enrichedResponse = enrichResponse(response, tenant, language, trackingString);
+    // Enriquecer respuesta con globalConfig, country y hreflang centralizado
+    const enrichedResponse = enrichResponse(response, tenant, language, trackingString, pathname);
 
     return jsonResponse(enrichedResponse);
 
@@ -927,17 +936,30 @@ function buildCountryData(tenant: TenantConfig): any {
 }
 
 // ============================================================================
-// ENRICH RESPONSE - Agrega globalConfig y country a todas las respuestas
+// ENRICH RESPONSE - Agrega globalConfig, country y hreflang a TODAS las respuestas
 // ============================================================================
 
-function enrichResponse(response: any, tenant: TenantConfig, language: string, trackingString: string): any {
+function enrichResponse(
+  response: any,
+  tenant: TenantConfig,
+  language: string,
+  trackingString: string,
+  pathname: string
+): any {
+  // Usar el sistema centralizado de idiomas para generar hreflang
+  const languageData = utils.processLanguageData(pathname, language);
+
   return {
     ...response,
     globalConfig: buildGlobalConfig(tenant, language),
     country: buildCountryData(tenant),
     countryConfig: buildCountryConfig(tenant),
     language,
-    trackingString
+    trackingString,
+    // NUEVO: Datos centralizados de idioma y hreflang
+    hreflangData: languageData.hreflangUrls,
+    canonicalPath: languageData.canonicalPath,
+    currentLanguage: languageData.currentLanguage
   };
 }
 

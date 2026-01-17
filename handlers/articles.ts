@@ -785,12 +785,14 @@ function generateArticlesMainSEO(
     fr: `Découvrez ${totalArticles} articles sur l'immobilier, l'investissement immobilier et les tendances du marché. Conseils d'experts pour acheter, vendre et louer des propriétés.`,
   };
 
-  const canonicalUrl = utils.buildUrl('/articulos', language);
+  const basePath = '/articulos';
+  const canonicalUrl = utils.buildUrl(basePath, language);
 
   return {
     title: `${titles[language] || titles.es} | ${tenant.name}`,
     description: descriptions[language] || descriptions.es,
     canonical_url: canonicalUrl,
+    hreflang: utils.generateHreflangUrls(basePath),
     structured_data: {
       '@context': 'https://schema.org',
       '@type': 'Blog',
@@ -824,12 +826,14 @@ function generateArticlesCategorySEO(
     fr: `Lisez ${totalArticles} articles sur ${category.name.toLowerCase()}. Informations et conseils d'experts immobiliers de ${tenant.name}.`,
   };
 
-  const canonicalUrl = utils.buildUrl(`/articulos/${category.slug}`, language);
+  const basePath = `/articulos/${category.slug}`;
+  const canonicalUrl = utils.buildUrl(basePath, language);
 
   return {
     title: `${titles[language] || titles.es} | ${tenant.name}`,
     description: descriptions[language] || descriptions.es,
     canonical_url: canonicalUrl,
+    hreflang: utils.generateHreflangUrls(basePath),
     structured_data: {
       '@context': 'https://schema.org',
       '@type': 'CollectionPage',
@@ -846,13 +850,15 @@ function generateSingleArticleSEO(
   language: string,
   tenant: TenantConfig
 ): SEOData {
-  const canonicalUrl = utils.buildUrl(`/articulos/${category.slug}/${article.slug}`, language);
+  const basePath = `/articulos/${category.slug}/${article.slug}`;
+  const canonicalUrl = utils.buildUrl(basePath, language);
 
   return {
     title: `${article.title} | ${tenant.name}`,
     description: article.excerpt.substring(0, 160),
     canonical_url: canonicalUrl,
     og_image: article.featuredImage,
+    hreflang: utils.generateHreflangUrls(basePath),
     structured_data: {
       '@context': 'https://schema.org',
       '@type': 'Article',

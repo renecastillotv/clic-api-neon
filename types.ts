@@ -30,6 +30,7 @@ export interface SEOData {
     es: string;
     en?: string;
     fr?: string;
+    'x-default'?: string;
   };
 }
 

@@ -168,13 +168,17 @@ async function handleTestimonialsCategory(options: {
 
   if (!categoryConfig) {
     // Soft 404: devolver página de categoría con notFound para preservar SEO
-    const seo = utils.generateSEO({
-      title: `${categorySlug} | Testimonios | ${tenant.name}`,
-      description: `Categoría de testimonios`,
-      canonicalUrl: buildCategoryUrl(categorySlug, language, ''),
-      language,
-      siteName: tenant.name
-    });
+    const hreflang = generateTestimonialCategoryHreflang(categorySlug);
+    const seo = {
+      ...utils.generateSEO({
+        title: `${categorySlug} | Testimonios | ${tenant.name}`,
+        description: `Categoría de testimonios`,
+        canonicalUrl: hreflang[language as keyof typeof hreflang] || hreflang.es,
+        language,
+        siteName: tenant.name
+      }),
+      hreflang
+    };
 
     const breadcrumbs = [
       { name: language === 'en' ? 'Home' : language === 'fr' ? 'Accueil' : 'Inicio', url: language === 'es' ? '/' : `/${language}/` },
@@ -233,17 +237,21 @@ async function handleTestimonialsCategory(options: {
 
   const total = processedTestimonials.length;
 
-  // Generar SEO para categoría
+  // Generar SEO para categoría con hreflang traducido
   const categoryName = categoryConfig.name[language as keyof typeof categoryConfig.name] || categoryConfig.name.es;
   const categoryDescription = categoryConfig.description[language as keyof typeof categoryConfig.description] || categoryConfig.description.es;
+  const hreflang = generateTestimonialCategoryHreflang(categorySlug);
 
-  const seo = utils.generateSEO({
-    title: `${categoryName} | Testimonios | ${tenant.name}`,
-    description: categoryDescription,
-    canonicalUrl: buildCategoryUrl(categorySlug, language, ''),
-    language,
-    siteName: tenant.name
-  });
+  const seo = {
+    ...utils.generateSEO({
+      title: `${categoryName} | Testimonios | ${tenant.name}`,
+      description: categoryDescription,
+      canonicalUrl: hreflang[language as keyof typeof hreflang] || hreflang.es,
+      language,
+      siteName: tenant.name
+    }),
+    hreflang
+  };
 
   // Breadcrumbs separados
   const breadcrumbs = [
@@ -308,15 +316,19 @@ async function handleSingleTestimonial(options: {
 
   if (!testimonialItem) {
     // Soft 404: devolver página de testimonio individual con notFound para preservar SEO
-    const testimonialUrl = buildTestimonialUrl(categorySlug, slug, language, trackingString);
+    const hreflang = generateSingleTestimonialHreflang(categorySlug, slug);
+    const testimonialUrl = hreflang[language as keyof typeof hreflang] || hreflang.es;
 
-    const seo = utils.generateSEO({
-      title: `Testimonio | ${tenant.name}`,
-      description: language === 'en' ? 'Testimonial not found' : language === 'fr' ? 'Témoignage non trouvé' : 'Testimonio no encontrado',
-      canonicalUrl: testimonialUrl,
-      language,
-      siteName: tenant.name
-    });
+    const seo = {
+      ...utils.generateSEO({
+        title: `Testimonio | ${tenant.name}`,
+        description: language === 'en' ? 'Testimonial not found' : language === 'fr' ? 'Témoignage non trouvé' : 'Testimonio no encontrado',
+        canonicalUrl: testimonialUrl,
+        language,
+        siteName: tenant.name
+      }),
+      hreflang
+    };
 
     const breadcrumbs = [
       { name: language === 'en' ? 'Home' : language === 'fr' ? 'Accueil' : 'Inicio', url: language === 'es' ? '/' : `/${language}/` },
@@ -380,14 +392,20 @@ async function handleSingleTestimonial(options: {
     .slice(0, 6)
     .map((t: Record<string, any>) => processTestimonial(t, language, trackingString, categorySlug));
 
-  // Generar SEO
-  const seo = utils.generateSEO({
-    title: `${processedTestimonial.title} - ${processedTestimonial.clientName} | ${tenant.name}`,
-    description: processedTestimonial.excerpt,
-    canonicalUrl: processedTestimonial.url,
-    language,
-    siteName: tenant.name
-  });
+  // Generar SEO con hreflang traducido
+  const testimonialSlug = processedTestimonial.slug || slug;
+  const hreflang = generateSingleTestimonialHreflang(categorySlug, testimonialSlug);
+
+  const seo = {
+    ...utils.generateSEO({
+      title: `${processedTestimonial.title} - ${processedTestimonial.clientName} | ${tenant.name}`,
+      description: processedTestimonial.excerpt,
+      canonicalUrl: hreflang[language as keyof typeof hreflang] || hreflang.es,
+      language,
+      siteName: tenant.name
+    }),
+    hreflang
+  };
 
   // Breadcrumbs separados
   const breadcrumbs = [
@@ -496,6 +514,16 @@ function buildTestimonialUrl(categorySlug: string, testimonialSlug: string, lang
   return `${base}/${categorySlug}/${testimonialSlug}${trackingString}`;
 }
 
+// Generar hreflang para categoría de testimonios
+function generateTestimonialCategoryHreflang(categorySlug: string) {
+  return utils.generateHreflangUrls(`/testimonios/${categorySlug}`);
+}
+
+// Generar hreflang para testimonio individual
+function generateSingleTestimonialHreflang(categorySlug: string, testimonialSlug: string) {
+  return utils.generateHreflangUrls(`/testimonios/${categorySlug}/${testimonialSlug}`);
+}
+
 // ============================================================================
 // FUNCIONES AUXILIARES
 // ============================================================================
@@ -527,13 +555,19 @@ function generateTestimonialsSEO(
     fr: `Lisez ${total} témoignages de clients satisfaits qui ont trouvé leur propriété idéale avec nous.`
   };
 
-  return utils.generateSEO({
+  // Generar hreflang usando el mapa de traducciones
+  const hreflang = utils.generateHreflangUrls('/testimonios');
+  const canonicalUrl = hreflang[language as keyof typeof hreflang] || hreflang.es;
+
+  const seo = utils.generateSEO({
     title: `${titles[language as keyof typeof titles]} | ${tenant.name}`,
     description: descriptions[language as keyof typeof descriptions],
-    canonicalUrl: utils.buildUrl('/testimonios', language),
+    canonicalUrl,
     language,
     siteName: tenant.name
   });
+
+  return { ...seo, hreflang };
 }
 
 function generateFAQsSEO(
@@ -553,13 +587,18 @@ function generateFAQsSEO(
     fr: `Trouvez des réponses aux ${total} questions les plus fréquemment posées sur l'immobilier et nos services.`
   };
 
-  return utils.generateSEO({
+  // FAQs usa la misma ruta en todos los idiomas, solo cambia el prefijo
+  const hreflang = utils.generateHreflangUrls('/faqs');
+
+  const seo = utils.generateSEO({
     title: `${titles[language as keyof typeof titles]} | ${tenant.name}`,
     description: descriptions[language as keyof typeof descriptions],
-    canonicalUrl: utils.buildUrl('/faqs', language),
+    canonicalUrl: hreflang[language as keyof typeof hreflang] || hreflang.es,
     language,
     siteName: tenant.name
   });
+
+  return { ...seo, hreflang };
 }
 
 export default {

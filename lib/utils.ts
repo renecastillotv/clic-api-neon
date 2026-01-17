@@ -17,6 +17,60 @@ import type {
 export const SUPPORTED_LANGUAGES = ['es', 'en', 'fr'] as const;
 export type SupportedLanguage = typeof SUPPORTED_LANGUAGES[number];
 
+// ============================================================================
+// MAPA DE TRADUCCIÓN DE RUTAS
+// Cada clave es el slug en español, los valores son las traducciones
+// ============================================================================
+export const ROUTE_TRANSLATIONS: Record<string, Record<string, string>> = {
+  // Páginas principales
+  'vender': { es: 'vender', en: 'sell', fr: 'vendre' },
+  'comprar': { es: 'comprar', en: 'buy', fr: 'acheter' },
+  'alquilar': { es: 'alquilar', en: 'rent', fr: 'louer' },
+
+  // Asesores
+  'asesores': { es: 'asesores', en: 'advisors', fr: 'conseillers' },
+
+  // Favoritos y propuestas
+  'favoritos': { es: 'favoritos', en: 'favorites', fr: 'favoris' },
+  'propuestas': { es: 'propuestas', en: 'proposals', fr: 'propositions' },
+
+  // Contenido
+  'testimonios': { es: 'testimonios', en: 'testimonials', fr: 'temoignages' },
+  'articulos': { es: 'articulos', en: 'articles', fr: 'articles' },
+  'videos': { es: 'videos', en: 'videos', fr: 'videos' },
+
+  // Contacto
+  'contacto': { es: 'contacto', en: 'contact', fr: 'contact' },
+
+  // Rentas vacacionales
+  'rentas-vacacionales': { es: 'rentas-vacacionales', en: 'vacation-rentals', fr: 'locations-vacances' },
+
+  // Listados curados
+  'listados-de': { es: 'listados-de', en: 'listings-of', fr: 'listes-de' },
+
+  // Ubicaciones y tipos
+  'ubicaciones': { es: 'ubicaciones', en: 'locations', fr: 'emplacements' },
+  'propiedades': { es: 'propiedades', en: 'properties', fr: 'proprietes' },
+  'tipos-de-propiedad': { es: 'tipos-de-propiedad', en: 'property-types', fr: 'types-de-proprietes' },
+
+  // Legales
+  'terminos-y-condiciones': { es: 'terminos-y-condiciones', en: 'terms-and-conditions', fr: 'termes-et-conditions' },
+  'politicas-de-privacidad': { es: 'politicas-de-privacidad', en: 'privacy-policy', fr: 'politique-de-confidentialite' },
+
+  // FAQs
+  'faqs': { es: 'faqs', en: 'faqs', fr: 'faqs' },
+};
+
+// Mapa inverso: dado un slug en cualquier idioma, obtener el slug base (español)
+export const ROUTE_SLUG_TO_BASE: Record<string, string> = {};
+
+// Construir el mapa inverso
+Object.entries(ROUTE_TRANSLATIONS).forEach(([baseSlug, translations]) => {
+  Object.values(translations).forEach(translatedSlug => {
+    ROUTE_SLUG_TO_BASE[translatedSlug] = baseSlug;
+  });
+});
+
 export function getLocalizedText(
   text: MultilingualText | string | null | undefined,
   language: string
@@ -226,17 +280,14 @@ export function buildUrl(
   language: string,
   trackingString?: string
 ): string {
-  let url = basePath || '/';
-
-  // Agregar prefijo de idioma si no es español
-  if (language !== 'es' && language) {
-    url = `/${language}${url.startsWith('/') ? '' : '/'}${url}`;
+  if (!basePath || basePath === '/') {
+    // Homepage
+    const url = language === 'es' ? '/' : `/${language}`;
+    return url + (trackingString || '');
   }
 
-  // Asegurar barra inicial
-  if (!url.startsWith('/')) {
-    url = `/${url}`;
-  }
+  // Usar translatePath para obtener la URL correcta con slug traducido
+  let url = translatePath(basePath, language);
 
   // Limpiar barras dobles
   url = url.replace(/\/+/g, '/');
@@ -396,6 +447,227 @@ function isNewProperty(createdAt: string | Date | null): boolean {
 // GENERACIÓN DE SEO
 // ============================================================================
 
+/**
+ * Traduce un segmento de ruta al idioma destino
+ * Ejemplo: translateRouteSegment('sell', 'es') => 'vender'
+ * Ejemplo: translateRouteSegment('vender', 'en') => 'sell'
+ */
+export function translateRouteSegment(segment: string, toLang: string): string {
+  // Buscar el slug base (español) para este segmento
+  const baseSlug = ROUTE_SLUG_TO_BASE[segment];
+
+  if (baseSlug && ROUTE_TRANSLATIONS[baseSlug]) {
+    // Tenemos traducción, retornar la versión en el idioma destino
+    return ROUTE_TRANSLATIONS[baseSlug][toLang] || segment;
+  }
+
+  // No hay traducción, retornar el segmento original
+  return segment;
+}
+
+/**
+ * Detecta el idioma de un pathname basándose en el prefijo
+ * @param pathname - Path de la URL (e.g., '/en/sell', '/vender', '/fr/acheter')
+ * @returns El idioma detectado ('es', 'en', 'fr')
+ */
+export function detectLanguageFromPathname(pathname: string): SupportedLanguage {
+  if (!pathname) return 'es';
+
+  // Limpiar el pathname
+  const cleanPath = pathname.startsWith('/') ? pathname : `/${pathname}`;
+
+  // Verificar prefijos de idioma
+  if (cleanPath.startsWith('/en/') || cleanPath === '/en') return 'en';
+  if (cleanPath.startsWith('/fr/') || cleanPath === '/fr') return 'fr';
+
+  return 'es';
+}
+
+/**
+ * Remueve el prefijo de idioma de un pathname
+ * @param pathname - Path completo (e.g., '/en/sell', '/fr/vendre')
+ * @returns Path sin prefijo de idioma (e.g., '/sell', '/vendre')
+ */
+export function removeLanguagePrefix(pathname: string): string {
+  if (!pathname) return '/';
+
+  // Remover prefijos de idioma conocidos
+  let cleanPath = pathname
+    .replace(/^\/(en|fr)\//, '/')  // /en/xxx -> /xxx
+    .replace(/^\/(en|fr)$/, '/');   // /en or /fr alone -> /
+
+  // Asegurar que empiece con /
+  if (!cleanPath.startsWith('/')) {
+    cleanPath = '/' + cleanPath;
+  }
+
+  return cleanPath;
+}
+
+/**
+ * Traduce un path completo de un idioma a otro
+ * CENTRALIZADO: Esta función es la ÚNICA que debe usarse para traducir paths
+ *
+ * @param pathname - Path de la URL (puede tener o no prefijo de idioma)
+ * @param targetLang - Idioma destino ('es', 'en', 'fr')
+ * @returns Path traducido con prefijo correcto (relativo, sin dominio)
+ *
+ * Ejemplos:
+ *   translatePath('/en/sell', 'es') => '/vender'
+ *   translatePath('/vender', 'en') => '/en/sell'
+ *   translatePath('/fr/acheter/apartamento', 'es') => '/comprar/apartamento'
+ *   translatePath('/', 'en') => '/en'
+ */
+export function translatePath(pathname: string, targetLang: string): string {
+  // Caso especial: pathname vacío o solo /
+  if (!pathname || pathname === '/' || pathname === '') {
+    return targetLang === 'es' ? '/' : `/${targetLang}`;
+  }
+
+  // 1. Primero remover CUALQUIER prefijo de idioma existente
+  let cleanPath = removeLanguagePrefix(pathname);
+
+  // 2. Si el path quedó vacío después de remover prefijo, es homepage
+  if (cleanPath === '' || cleanPath === '/') {
+    return targetLang === 'es' ? '/' : `/${targetLang}`;
+  }
+
+  // 3. Dividir en segmentos
+  const segments = cleanPath.split('/').filter(s => s && s.length > 0);
+
+  if (segments.length === 0) {
+    return targetLang === 'es' ? '/' : `/${targetLang}`;
+  }
+
+  // 4. Traducir segmentos
+  const translatedSegments = segments.map((segment, index) => {
+    // Solo traducir el primer segmento (la ruta principal como 'vender', 'comprar', etc.)
+    // Los demás segmentos (categorías, ubicaciones, slugs de propiedad) se mantienen igual
+    if (index === 0) {
+      return translateRouteSegment(segment, targetLang);
+    }
+    return segment;
+  });
+
+  // 5. Reconstruir el path
+  const translatedPath = '/' + translatedSegments.join('/');
+
+  // 6. Agregar prefijo de idioma si no es español
+  if (targetLang === 'es') {
+    return translatedPath;
+  }
+
+  // Para otros idiomas, agregar prefijo SIN duplicación
+  return `/${targetLang}${translatedPath}`;
+}
+
+// Tipo para hreflang URLs
+export type HreflangUrls = {
+  es: string;
+  en?: string;
+  fr?: string;
+  'x-default'?: string;
+};
+
+/**
+ * ============================================================================
+ * GENERADOR CENTRALIZADO DE HREFLANG
+ * ============================================================================
+ *
+ * Esta es la ÚNICA función que debe usarse para generar URLs de hreflang.
+ * Garantiza:
+ *   - URLs relativas (sin dominio)
+ *   - Sin duplicación de prefijos de idioma
+ *   - Traducción correcta de slugs de ruta
+ *   - Consistencia en toda la aplicación
+ *
+ * @param pathname - Path de la URL actual (con o sin prefijo de idioma)
+ * @returns Objeto con URLs por idioma, todas relativas
+ *
+ * Ejemplos:
+ *   generateHreflangUrls('/vender')
+ *   => { es: '/vender', en: '/en/sell', fr: '/fr/vendre', 'x-default': '/vender' }
+ *
+ *   generateHreflangUrls('/en/sell')
+ *   => { es: '/vender', en: '/en/sell', fr: '/fr/vendre', 'x-default': '/vender' }
+ *
+ *   generateHreflangUrls('/fr/acheter/apartamento/zona-colonial')
+ *   => { es: '/comprar/apartamento/zona-colonial', en: '/en/buy/apartamento/zona-colonial', ... }
+ */
+export function generateHreflangUrls(pathname: string): HreflangUrls {
+  // Caso: pathname vacío o root
+  if (!pathname || pathname === '/' || pathname === '') {
+    return {
+      es: '/',
+      en: '/en',
+      fr: '/fr',
+      'x-default': '/'
+    };
+  }
+
+  // Limpiar el pathname de cualquier duplicación previa
+  let cleanPathname = pathname;
+
+  // Prevenir duplicación: si ya tiene múltiples prefijos de idioma, limpiar
+  // Ejemplo: /en/fr/vendre -> limpiar a /vendre
+  const multiLangMatch = cleanPathname.match(/^\/(en|fr)\/(en|fr)\//);
+  if (multiLangMatch) {
+    cleanPathname = cleanPathname.replace(/^\/(en|fr)\/(en|fr)\//, '/');
+    console.warn(`[generateHreflangUrls] Corregida duplicación de prefijos en: ${pathname}`);
+  }
+
+  // Generar URLs traducidas para cada idioma usando translatePath
+  const esUrl = translatePath(cleanPathname, 'es');
+  const enUrl = translatePath(cleanPathname, 'en');
+  const frUrl = translatePath(cleanPathname, 'fr');
+
+  // Validación: asegurar que no haya duplicación de prefijos
+  const validateUrl = (url: string, lang: string): string => {
+    // Verificar que no haya prefijos duplicados
+    if (lang !== 'es' && url.match(new RegExp(`^/${lang}/${lang}/`))) {
+      return url.replace(new RegExp(`^/${lang}/${lang}/`), `/${lang}/`);
+    }
+    return url;
+  };
+
+  return {
+    es: esUrl,
+    en: validateUrl(enUrl, 'en'),
+    fr: validateUrl(frUrl, 'fr'),
+    'x-default': esUrl  // Default siempre es español
+  };
+}
+
+/**
+ * ============================================================================
+ * PROCESADOR CENTRALIZADO DE IDIOMA Y HREFLANG PARA RESPUESTAS API
+ * ============================================================================
+ *
+ * Esta función se usa en enrichResponse para agregar datos de idioma y hreflang
+ * de forma consistente a TODAS las respuestas de la API.
+ *
+ * @param pathname - Path actual de la solicitud
+ * @param language - Idioma detectado
+ * @returns Objeto con información de idioma y hreflang
+ */
+export function processLanguageData(pathname: string, language: string): {
+  currentLanguage: string;
+  hreflangUrls: HreflangUrls;
+  canonicalPath: string;
+} {
+  // Generar hreflang URLs
+  const hreflangUrls = generateHreflangUrls(pathname);
+
+  // La URL canónica es la del idioma actual
+  const canonicalPath = hreflangUrls[language as keyof HreflangUrls] || hreflangUrls.es;
+
+  return {
+    currentLanguage: language,
+    hreflangUrls,
+    canonicalPath
+  };
+}
+
 export function generateSEO(options: {
   title: string;
   description: string;
@@ -417,6 +689,9 @@ export function generateSEO(options: {
     siteName = 'CLIC Inmobiliaria'
   } = options;
 
+  // Generar hreflang correctamente usando la nueva función
+  const hreflang = canonicalUrl ? generateHreflangUrls(canonicalUrl) : undefined;
+
   return {
     title,
     description: description.substring(0, 160), // Limitar a 160 caracteres
@@ -431,11 +706,7 @@ export function generateSEO(options: {
       ...(canonicalUrl && { url: canonicalUrl }),
       ...(ogImage && { image: ogImage })
     },
-    hreflang: canonicalUrl ? {
-      es: canonicalUrl,
-      en: canonicalUrl.replace(/^\//, '/en/'),
-      fr: canonicalUrl.replace(/^\//, '/fr/')
-    } : undefined
+    hreflang
   };
 }
 
@@ -695,6 +966,14 @@ export default {
   parseCoordinates,
   toPropertyCard,
   generateSEO,
+  // Sistema centralizado de idiomas
+  generateHreflangUrls,
+  translatePath,
+  translateRouteSegment,
+  detectLanguageFromPathname,
+  removeLanguagePrefix,
+  processLanguageData,
+  // Utilidades generales
   safeArray,
   safeString,
   safeNumber,

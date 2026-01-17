@@ -877,12 +877,14 @@ function generateVideosMainSEO(
     fr: `Découvrez ${totalVideos} vidéos sur les propriétés, visites virtuelles et conseils immobiliers. Explorez notre contenu multimédia.`,
   };
 
-  const canonicalUrl = utils.buildUrl('/videos', language);
+  const basePath = '/videos';
+  const canonicalUrl = utils.buildUrl(basePath, language);
 
   return {
     title: `${titles[language] || titles.es} | ${tenant.name}`,
     description: descriptions[language] || descriptions.es,
     canonical_url: canonicalUrl,
+    hreflang: utils.generateHreflangUrls(basePath),
     structured_data: {
       '@context': 'https://schema.org',
       '@type': 'VideoGallery',
@@ -915,12 +917,14 @@ function generateVideosCategorySEO(
     fr: `Regardez ${totalVideos} vidéos sur ${category.name.toLowerCase()}. Contenu multimédia de ${tenant.name}.`,
   };
 
-  const canonicalUrl = utils.buildUrl(`/videos/${category.slug}`, language);
+  const basePath = `/videos/${category.slug}`;
+  const canonicalUrl = utils.buildUrl(basePath, language);
 
   return {
     title: `${titles[language] || titles.es} | ${tenant.name}`,
     description: descriptions[language] || descriptions.es,
     canonical_url: canonicalUrl,
+    hreflang: utils.generateHreflangUrls(basePath),
     structured_data: {
       '@context': 'https://schema.org',
       '@type': 'CollectionPage',
@@ -938,13 +942,15 @@ function generateSingleVideoSEO(
   tenant: TenantConfig
 ): SEOData {
   const categorySlug = category?.slug || 'general';
-  const canonicalUrl = utils.buildUrl(`/videos/${categorySlug}/${video.slug}`, language);
+  const basePath = `/videos/${categorySlug}/${video.slug}`;
+  const canonicalUrl = utils.buildUrl(basePath, language);
 
   return {
     title: `${video.title} | ${tenant.name}`,
     description: video.description.substring(0, 160),
     canonical_url: canonicalUrl,
     og_image: video.thumbnail,
+    hreflang: utils.generateHreflangUrls(basePath),
     structured_data: {
       '@context': 'https://schema.org',
       '@type': 'VideoObject',
