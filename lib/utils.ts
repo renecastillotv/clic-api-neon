@@ -53,9 +53,20 @@ export const ROUTE_TRANSLATIONS: Record<string, Record<string, string>> = {
   'propiedades': { es: 'propiedades', en: 'properties', fr: 'proprietes' },
   'tipos-de-propiedad': { es: 'tipos-de-propiedad', en: 'property-types', fr: 'types-de-proprietes' },
 
-  // Legales
-  'terminos-y-condiciones': { es: 'terminos-y-condiciones', en: 'terms-and-conditions', fr: 'termes-et-conditions' },
-  'politicas-de-privacidad': { es: 'politicas-de-privacidad', en: 'privacy-policy', fr: 'politique-de-confidentialite' },
+  // Legales (versiones largas y cortas)
+  'terminos-y-condiciones': { es: 'terminos', en: 'terms', fr: 'termes' },
+  'terminos': { es: 'terminos', en: 'terms', fr: 'termes' },
+  'politicas-de-privacidad': { es: 'privacidad', en: 'privacy', fr: 'confidentialite' },
+  'privacidad': { es: 'privacidad', en: 'privacy', fr: 'confidentialite' },
+  // Alias en inglés y francés
+  'terms-and-conditions': { es: 'terminos', en: 'terms', fr: 'termes' },
+  'terms': { es: 'terminos', en: 'terms', fr: 'termes' },
+  'privacy-policy': { es: 'privacidad', en: 'privacy', fr: 'confidentialite' },
+  'privacy': { es: 'privacidad', en: 'privacy', fr: 'confidentialite' },
+  'termes-et-conditions': { es: 'terminos', en: 'terms', fr: 'termes' },
+  'termes': { es: 'terminos', en: 'terms', fr: 'termes' },
+  'politique-de-confidentialite': { es: 'privacidad', en: 'privacy', fr: 'confidentialite' },
+  'confidentialite': { es: 'privacidad', en: 'privacy', fr: 'confidentialite' },
 
   // FAQs
   'faqs': { es: 'faqs', en: 'faqs', fr: 'faqs' },
