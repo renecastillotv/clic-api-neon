@@ -359,9 +359,13 @@ export async function handleSingleProperty(options: {
   // Formatear propiedades similares
   const similarPropertiesArray = similarPropertiesRaw as any[];
   const similarProperties = similarPropertiesArray.map((p: any) => {
-    const price = p.precio_venta || p.precio_alquiler || 0;
+    // Usar el campo operacion como fuente principal (venta/alquiler)
+    const operationType = p.operacion || 'venta';
+    // Seleccionar el precio según la operación principal
+    const price = operationType === 'venta'
+      ? (p.precio_venta || p.precio || 0)
+      : (p.precio_alquiler || p.precio || 0);
     const currency = p.moneda || 'USD';
-    const operationType = p.precio_venta ? 'venta' : 'alquiler';
     const operationDisplay = language === 'en' ? (operationType === 'venta' ? 'Sale' : 'Rent') :
                              language === 'fr' ? (operationType === 'venta' ? 'Vente' : 'Location') :
                              (operationType === 'venta' ? 'Venta' : 'Alquiler');
