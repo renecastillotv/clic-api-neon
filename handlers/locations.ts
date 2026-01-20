@@ -552,9 +552,11 @@ export async function handleLocations({
     },
     trackingString,
   };
-  } catch (error) {
-    console.error('[Locations Handler] Error:', error);
-    // Devolver respuesta de fallback en caso de error
+  } catch (error: any) {
+    const errorMessage = error?.message || String(error);
+    console.error('[Locations Handler] Error:', errorMessage);
+    console.error('[Locations Handler] Stack:', error?.stack);
+    // Devolver respuesta de fallback en caso de error con mensaje de debug
     return {
       type: 'locations-main',
       pageType: 'locations-main',
@@ -573,6 +575,7 @@ export async function handleLocations({
       },
       featuredByLocation: {},
       seoContent: SEO_CONTENT[language] || SEO_CONTENT.es,
+      _debug_error: errorMessage, // Temporalmente para ver el error
       seo: {
         title: language === 'es' ? 'Ubicaciones | CLIC' :
               language === 'en' ? 'Locations | CLIC' : 'Emplacements | CLIC',
