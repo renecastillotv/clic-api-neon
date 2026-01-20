@@ -5,6 +5,24 @@ import db from '../lib/db';
 import utils from '../lib/utils';
 import type { TenantConfig } from '../types';
 
+// Helper para construir URL de propiedad con estructura completa
+// Formato: /{operacion}/{tipo}/{ciudad}/{sector}/{slug}
+function buildPropertySlugUrl(prop: any, language: string): string {
+  const operation = prop.precio_venta ? 'comprar' : 'alquilar';
+  const category = utils.slugify(prop.tipo || 'propiedad');
+  const city = utils.slugify(prop.ciudad || '');
+  const sector = utils.slugify(prop.sector || '');
+  const slug = prop.slug;
+
+  let url = `/${operation}`;
+  if (category) url += `/${category}`;
+  if (city) url += `/${city}`;
+  if (sector) url += `/${sector}`;
+  url += `/${slug}`;
+
+  return utils.buildUrl(url, language);
+}
+
 // Iconos, colores e imágenes por tipo de propiedad
 const TYPE_CONFIG: Record<string, { icon: string; color: string; image?: string }> = {
   apartamento: {
@@ -473,10 +491,13 @@ export async function handlePropertyTypes({
         imagenes.unshift(p.imagen_principal);
       }
 
+      // Construir URL completa: /comprar/villa/punta-cana/bavaro/slug
+      const propertyUrl = buildPropertySlugUrl(p, language);
+
       return {
         id: p.id,
         slug: p.slug,
-        url: `/${p.slug}`,
+        url: propertyUrl,
         // Nombres en español para PropertyCarousel
         titulo: p.titulo || '',
         precio: utils.formatPrice(price, p.moneda || 'USD', operationType, language),

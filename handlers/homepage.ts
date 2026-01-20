@@ -28,7 +28,8 @@ export async function handleHomepage(options: {
     advisors,
     faqs,
     videosData,
-    articlesData
+    articlesData,
+    filterOptions
   ] = await Promise.all([
     db.getFeaturedProperties(tenant.id, 12),
     db.getPopularLocations(tenant.id),
@@ -37,14 +38,22 @@ export async function handleHomepage(options: {
     db.getAdvisors(tenant.id, 4),
     db.getFAQs({ tenantId: tenant.id, limit: 6 }),
     videosHandler.handleVideosMain({ tenant, language, trackingString, page: 1, limit: 6 }),
-    articlesHandler.handleArticles({ tenant, language, trackingString, page: 1, limit: 4 })
+    articlesHandler.handleArticles({ tenant, language, trackingString, page: 1, limit: 4 }),
+    db.getFilterOptions(tenant.id)
   ]);
 
   // Convertir propiedades al formato Supabase
   const properties = featuredProperties.map(p => toSupabasePropertyFormat(p, language, trackingString));
 
-  // Construir searchTags en formato Supabase
-  const searchTags = buildSearchTags(popularLocations, language);
+  // Usar filterOptions directamente como searchTags (incluye tipos, ubicaciones, amenidades)
+  const searchTags = {
+    tags: filterOptions,
+    locationHierarchy: [],
+    currencies: {
+      available: ['USD', 'DOP'],
+      default: 'USD'
+    }
+  };
 
   // Extraer videos y artículos reales de los handlers
   const realVideos = videosData?.recentVideos || videosData?.featuredVideos || [];

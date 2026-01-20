@@ -5,6 +5,24 @@ import db from '../lib/db';
 import utils from '../lib/utils';
 import type { TenantConfig } from '../types';
 
+// Helper para construir URL de propiedad con estructura completa
+// Formato: /{operacion}/{tipo}/{ciudad}/{sector}/{slug}
+function buildPropertySlugUrl(prop: any, language: string): string {
+  const operation = prop.precio_venta ? 'comprar' : 'alquilar';
+  const category = utils.slugify(prop.tipo || 'propiedad');
+  const city = utils.slugify(prop.ciudad || '');
+  const sector = utils.slugify(prop.sector || '');
+  const slug = prop.slug;
+
+  let url = `/${operation}`;
+  if (category) url += `/${category}`;
+  if (city) url += `/${city}`;
+  if (sector) url += `/${sector}`;
+  url += `/${slug}`;
+
+  return utils.buildUrl(url, language);
+}
+
 // Configuración de ciudades principales con imágenes y colores
 const CITY_CONFIG: Record<string, { icon: string; color: string; image?: string }> = {
   'santo-domingo': {
@@ -311,13 +329,15 @@ export async function handleLocations({
     const locationStats = await db.getLocationStats(tenantId);
 
     // Los datos vienen directamente de stats_cache con el formato correcto
+    // Ahora incluyen imagen de una propiedad representativa
     const ciudades = (locationStats.cities || []).map((c: any) => ({
       name: c.name,
       slug: c.slug,
       count: parseInt(c.count, 10) || 0,
       count_venta: parseInt(c.count_venta, 10) || 0,
       count_alquiler: parseInt(c.count_alquiler, 10) || 0,
-      parent_slug: c.parent_slug || null
+      parent_slug: c.parent_slug || null,
+      image: c.image || null
     }));
 
     const sectores = (locationStats.sectors || []).map((s: any) => ({
@@ -326,7 +346,8 @@ export async function handleLocations({
       count: parseInt(s.count, 10) || 0,
       count_venta: parseInt(s.count_venta, 10) || 0,
       count_alquiler: parseInt(s.count_alquiler, 10) || 0,
-      parent_slug: s.parent_slug || null
+      parent_slug: s.parent_slug || null,
+      image: s.image || null
     }));
 
     const provincias = (locationStats.provinces || []).map((p: any) => ({
@@ -335,7 +356,8 @@ export async function handleLocations({
       count: parseInt(p.count, 10) || 0,
       count_venta: parseInt(p.count_venta, 10) || 0,
       count_alquiler: parseInt(p.count_alquiler, 10) || 0,
-      parent_slug: null
+      parent_slug: null,
+      image: p.image || null
     }));
 
   if ((!ciudades || ciudades.length === 0) && (!sectores || sectores.length === 0)) {
@@ -371,10 +393,13 @@ export async function handleLocations({
   }
 
   // Enriquecer las ciudades con imágenes, iconos y descripciones
+  // La imagen viene de la base de datos (una propiedad en esa ciudad)
   const enrichedCities = (ciudades || []).map((city: any) => {
     const config = CITY_CONFIG[city.slug] || { icon: '📍', color: '#6B7280' };
     const cityDescs = CITY_DESCRIPTIONS[city.slug];
     const description = cityDescs ? (cityDescs[lang] || cityDescs.es || '') : '';
+    // Usar imagen de la DB primero, fallback a config hardcodeado
+    const cityImage = city.image || config.image || null;
 
     return {
       name: city.name,
@@ -385,13 +410,13 @@ export async function handleLocations({
       parent_slug: city.parent_slug,
       icon: config.icon,
       color: config.color,
-      hasEnrichedData: !!config.image,
-      hero_image: config.image || null,
+      hasEnrichedData: !!cityImage,
+      hero_image: cityImage,
       seo_description: description,
     };
   });
 
-  // Enriquecer sectores
+  // Enriquecer sectores con imagen de la base de datos
   const enrichedSectors = (sectores || []).map((sector: any) => ({
     name: sector.name,
     slug: sector.slug,
@@ -399,6 +424,7 @@ export async function handleLocations({
     count_venta: sector.count_venta,
     count_alquiler: sector.count_alquiler,
     parent_slug: sector.parent_slug,
+    image: sector.image || null,
   }));
 
   // Ciudades destacadas (top 4 con más propiedades)
@@ -438,10 +464,13 @@ export async function handleLocations({
         imagenes.unshift(p.imagen_principal);
       }
 
+      // Construir URL completa: /comprar/villa/punta-cana/bavaro/slug
+      const propertyUrl = buildPropertySlugUrl(p, lang);
+
       return {
         id: p.id,
         slug: p.slug,
-        url: `/${p.slug}`,
+        url: propertyUrl,
         titulo: p.titulo || '',
         precio: utils.formatPrice(price, p.moneda || 'USD', operationType, lang),
         imagen: p.imagen_principal || '',
@@ -572,7 +601,7 @@ export async function handleLocations({
     const errorMessage = error?.message || String(error);
     console.error('[Locations Handler] Error:', errorMessage);
     console.error('[Locations Handler] Stack:', error?.stack);
-    // Devolver respuesta de fallback en caso de error con mensaje de debug
+    // Devolver respuesta de fallback en caso de error
     return {
       type: 'locations-main',
       pageType: 'locations-main',

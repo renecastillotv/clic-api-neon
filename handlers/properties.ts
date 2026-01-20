@@ -155,14 +155,13 @@ export async function handlePropertyList(options: {
   // Generar SEO con hreflang
   const seo = generateListSEO(filters, language, tenant, pagination.total_items, pathname);
 
-  // Obtener contenido relacionado
-  const [faqs, testimonials] = await Promise.all([
+  // Obtener contenido relacionado y opciones de filtros en paralelo
+  const [faqs, testimonials, filterOptions, popularLocations] = await Promise.all([
     db.getFAQs({ tenantId: tenant.id, limit: 8 }),
-    db.getTestimonials(tenant.id, 5)
+    db.getTestimonials(tenant.id, 5),
+    db.getFilterOptions(tenant.id),
+    db.getPopularLocations(tenant.id)
   ]);
-
-  // Obtener ubicaciones populares para hotItems
-  const popularLocations = await db.getPopularLocations(tenant.id);
 
   // Respuesta en formato Supabase - incluye campos a nivel raíz para compatibilidad con frontend
   return {
@@ -235,6 +234,8 @@ export async function handlePropertyList(options: {
     referralAgent: null,
     breadcrumbs,
     seo,
+    // Opciones de filtros para FilterModal
+    searchTags: filterOptions,
     countryInfo: {
       code: tenant.regional?.country_code || 'DO',
       name: 'República Dominicana',

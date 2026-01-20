@@ -1122,7 +1122,73 @@ export async function getLocationStats(tenantId: string) {
     ORDER BY count DESC
   `;
 
-  return { cities, sectors, provinces };
+  // Obtener imágenes representativas por ciudad (una query separada)
+  const cityImages = await sql`
+    SELECT DISTINCT ON (ciudad)
+      ciudad as location_name,
+      imagen_principal as image
+    FROM propiedades
+    WHERE tenant_id = ${tenantId}
+      AND activo = true
+      AND estado_propiedad = 'disponible'
+      AND imagen_principal IS NOT NULL
+      AND imagen_principal != ''
+      AND ciudad IS NOT NULL
+    ORDER BY ciudad, destacada DESC NULLS LAST, created_at DESC
+  ` as any[];
+
+  // Obtener imágenes representativas por sector
+  const sectorImages = await sql`
+    SELECT DISTINCT ON (sector)
+      sector as location_name,
+      imagen_principal as image
+    FROM propiedades
+    WHERE tenant_id = ${tenantId}
+      AND activo = true
+      AND estado_propiedad = 'disponible'
+      AND imagen_principal IS NOT NULL
+      AND imagen_principal != ''
+      AND sector IS NOT NULL
+    ORDER BY sector, destacada DESC NULLS LAST, created_at DESC
+  ` as any[];
+
+  // Obtener imágenes representativas por provincia
+  const provinceImages = await sql`
+    SELECT DISTINCT ON (provincia)
+      provincia as location_name,
+      imagen_principal as image
+    FROM propiedades
+    WHERE tenant_id = ${tenantId}
+      AND activo = true
+      AND estado_propiedad = 'disponible'
+      AND imagen_principal IS NOT NULL
+      AND imagen_principal != ''
+      AND provincia IS NOT NULL
+    ORDER BY provincia, destacada DESC NULLS LAST, created_at DESC
+  ` as any[];
+
+  // Crear mapas para lookup rápido
+  const cityImageMap = new Map(cityImages.map(c => [c.location_name, c.image]));
+  const sectorImageMap = new Map(sectorImages.map(s => [s.location_name, s.image]));
+  const provinceImageMap = new Map(provinceImages.map(p => [p.location_name, p.image]));
+
+  // Agregar imágenes a los resultados
+  const citiesWithImages = (cities as any[]).map(c => ({
+    ...c,
+    image: cityImageMap.get(c.name) || null
+  }));
+
+  const sectorsWithImages = (sectors as any[]).map(s => ({
+    ...s,
+    image: sectorImageMap.get(s.name) || null
+  }));
+
+  const provincesWithImages = (provinces as any[]).map(p => ({
+    ...p,
+    image: provinceImageMap.get(p.name) || null
+  }));
+
+  return { cities: citiesWithImages, sectors: sectorsWithImages, provinces: provincesWithImages };
 }
 
 /**
@@ -1309,6 +1375,183 @@ export async function getFeaturedPropertiesByLocation(
   }
 }
 
+/**
+ * Obtiene las amenidades disponibles para filtros
+ * Solo las más importantes/comunes
+ */
+export async function getFilterAmenities(tenantId: string, limit: number = 15) {
+  const sql = getSQL();
+
+  // Lista de amenidades importantes predefinidas para filtros
+  const importantAmenities = [
+    'piscina', 'gimnasio', 'terraza', 'balcon', 'jacuzzi',
+    'seguridad', 'area social', 'lobby', 'ascensor',
+    'planta electrica', 'generador', 'cisterna', 'amueblado',
+    'aire acondicionado', 'bbq', 'jardin', 'pool', 'gym'
+  ];
+
+  try {
+    // Intentar obtener amenidades filtrables (si la columna existe)
+    const result = await sql`
+      SELECT
+        COALESCE(a.codigo, LOWER(REPLACE(a.nombre, ' ', '-'))) as slug,
+        a.nombre as display_name,
+        a.icono as icon,
+        a.categoria as category,
+        a.traducciones
+      FROM amenidades a
+      WHERE (a.tenant_id = ${tenantId} OR a.tenant_id IS NULL)
+        AND a.activo = true
+        AND (
+          a.filtrable = true
+          OR LOWER(a.nombre) = ANY(${importantAmenities})
+          OR LOWER(a.codigo) = ANY(${importantAmenities})
+        )
+      ORDER BY a.orden ASC NULLS LAST, a.nombre ASC
+      LIMIT ${limit}
+    ` as Record<string, any>[];
+
+    if (result.length > 0) {
+      return result;
+    }
+  } catch (e) {
+    // Si falla (columna filtrable no existe), usar fallback
+    console.log('[getFilterAmenities] Fallback - columna filtrable puede no existir');
+  }
+
+  // Fallback: obtener las amenidades más comunes por nombre
+  const fallback = await sql`
+    SELECT
+      COALESCE(a.codigo, LOWER(REPLACE(a.nombre, ' ', '-'))) as slug,
+      a.nombre as display_name,
+      a.icono as icon,
+      a.categoria as category,
+      a.traducciones
+    FROM amenidades a
+    WHERE (a.tenant_id = ${tenantId} OR a.tenant_id IS NULL)
+      AND a.activo = true
+      AND (
+        LOWER(a.nombre) = ANY(${importantAmenities})
+        OR LOWER(a.codigo) = ANY(${importantAmenities})
+      )
+    ORDER BY a.nombre ASC
+    LIMIT ${limit}
+  ` as Record<string, any>[];
+
+  // Si aún no hay resultados, devolver las primeras amenidades
+  if (fallback.length === 0) {
+    const anyAmenities = await sql`
+      SELECT
+        COALESCE(a.codigo, LOWER(REPLACE(a.nombre, ' ', '-'))) as slug,
+        a.nombre as display_name,
+        a.icono as icon,
+        a.categoria as category,
+        a.traducciones
+      FROM amenidades a
+      WHERE (a.tenant_id = ${tenantId} OR a.tenant_id IS NULL)
+        AND a.activo = true
+      ORDER BY a.nombre ASC
+      LIMIT ${limit}
+    ` as Record<string, any>[];
+    return anyAmenities;
+  }
+
+  return fallback;
+}
+
+/**
+ * Obtiene todas las opciones para los filtros de búsqueda
+ * Incluye tipos de propiedad, ubicaciones y amenidades
+ */
+export async function getFilterOptions(tenantId: string) {
+  const sql = getSQL();
+
+  // Obtener datos en paralelo para mejor rendimiento
+  const [tipos, provincias, ciudades, sectores, amenidades] = await Promise.all([
+    // Tipos de propiedad desde stats_cache
+    sql`
+      SELECT slug, display_name, count
+      FROM stats_cache
+      WHERE tenant_id = ${tenantId}
+        AND category = 'tipo'
+        AND count > 0
+      ORDER BY count DESC
+    `,
+    // Provincias desde stats_cache
+    sql`
+      SELECT slug, display_name, count
+      FROM stats_cache
+      WHERE tenant_id = ${tenantId}
+        AND category = 'provincia'
+        AND count > 0
+      ORDER BY count DESC
+      LIMIT 20
+    `,
+    // Ciudades desde stats_cache
+    sql`
+      SELECT slug, display_name, count, parent_slug
+      FROM stats_cache
+      WHERE tenant_id = ${tenantId}
+        AND category = 'ciudad'
+        AND count > 0
+      ORDER BY count DESC
+      LIMIT 30
+    `,
+    // Sectores desde stats_cache
+    sql`
+      SELECT slug, display_name, count, parent_slug
+      FROM stats_cache
+      WHERE tenant_id = ${tenantId}
+        AND category = 'sector'
+        AND count > 0
+      ORDER BY count DESC
+      LIMIT 50
+    `,
+    // Amenidades para filtros
+    getFilterAmenities(tenantId, 15)
+  ]);
+
+  return {
+    tipo: (tipos as any[]).map((t, i) => ({
+      id: i + 1,
+      slug: t.slug,
+      display_name: t.display_name,
+      count: parseInt(t.count, 10)
+    })),
+    provincia: (provincias as any[]).map((p, i) => ({
+      id: i + 1,
+      slug: p.slug,
+      display_name: p.display_name,
+      count: parseInt(p.count, 10)
+    })),
+    ciudad: (ciudades as any[]).map((c, i) => ({
+      id: i + 1,
+      slug: c.slug,
+      display_name: c.display_name,
+      count: parseInt(c.count, 10),
+      parent_slug: c.parent_slug
+    })),
+    sector: (sectores as any[]).map((s, i) => ({
+      id: i + 1,
+      slug: s.slug,
+      display_name: s.display_name,
+      count: parseInt(s.count, 10),
+      parent_slug: s.parent_slug
+    })),
+    amenity: (amenidades as any[]).map((a, i) => ({
+      id: i + 1,
+      slug: a.slug || a.display_name?.toLowerCase().replace(/\s+/g, '-'),
+      display_name: a.display_name,
+      icon: a.icon,
+      category: a.category
+    })),
+    accion: [
+      { id: 1, slug: 'comprar', display_name: 'Comprar' },
+      { id: 2, slug: 'alquilar', display_name: 'Alquilar' }
+    ]
+  };
+}
+
 export default {
   getSQL,
   query,
@@ -1346,5 +1589,8 @@ export default {
   getPropertyTypeStats,
   getFeaturedPropertiesByType,
   getLocationStats,
-  getFeaturedPropertiesByLocation
+  getFeaturedPropertiesByLocation,
+  // Filter options
+  getFilterAmenities,
+  getFilterOptions
 };
