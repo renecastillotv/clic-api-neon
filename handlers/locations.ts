@@ -302,12 +302,24 @@ export async function handleLocations({
   try {
     const tenantId = tenant.id;
 
-    // Obtener estadísticas de ubicaciones desde stats_cache
-    const locationStats = await db.getLocationStats(tenantId);
+    // Obtener estadísticas de ubicaciones directamente desde propiedades
+    let locationStats;
+    try {
+      locationStats = await db.getLocationStats(tenantId);
+      console.log('[Locations] Stats obtenidos:', {
+        provincias: locationStats.provincias?.length || 0,
+        ciudades: locationStats.ciudades?.length || 0,
+        sectores: locationStats.sectores?.length || 0
+      });
+    } catch (statsError) {
+      console.error('[Locations] Error obteniendo stats:', statsError);
+      locationStats = { provincias: [], ciudades: [], sectores: [] };
+    }
 
   const { provincias, ciudades, sectores } = locationStats;
 
   if ((!ciudades || ciudades.length === 0) && (!sectores || sectores.length === 0)) {
+    console.log('[Locations] No hay datos de ubicaciones, retornando fallback');
     // Fallback si no hay datos
     return {
       type: 'locations-main',
@@ -325,6 +337,7 @@ export async function handleLocations({
         totalProperties: 0
       },
       featuredByLocation: {},
+      seoContent: SEO_CONTENT[language] || SEO_CONTENT.es,
       seo: utils.generateSEO({
         title: language === 'es' ? 'Ubicaciones' :
                language === 'en' ? 'Locations' : 'Emplacements',
