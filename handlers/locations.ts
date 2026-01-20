@@ -302,29 +302,21 @@ export async function handleLocations({
   try {
     const tenantId = tenant.id;
 
-    // TEST: Usar getPopularLocations que sabemos que funciona en properties handler
-    const popularLocations = await db.getPopularLocations(tenantId);
+    // HARDCODED TEST DATA para verificar que el problema no está en otra parte
+    const ciudades = [
+      { name: 'Santo Domingo D.N.', slug: 'santo-domingo-d.n.', count: 100, count_venta: 80, count_alquiler: 20, parent_slug: null },
+      { name: 'Punta Cana', slug: 'punta-cana', count: 26, count_venta: 20, count_alquiler: 6, parent_slug: null },
+      { name: 'Santiago', slug: 'santiago', count: 15, count_venta: 12, count_alquiler: 3, parent_slug: null }
+    ];
 
-    // Adaptar formato al esperado por el handler
-    const ciudades = (popularLocations.cities || []).map((c: any) => ({
-      name: c.name,
-      slug: c.slug,
-      count: parseInt(c.count, 10) || 0,
-      count_venta: 0,
-      count_alquiler: 0,
-      parent_slug: null
-    }));
-
-    const sectores = (popularLocations.sectors || []).map((s: any) => ({
-      name: s.name,
-      slug: s.slug,
-      count: parseInt(s.count, 10) || 0,
-      count_venta: 0,
-      count_alquiler: 0,
-      parent_slug: s.city ? s.city.toLowerCase().replace(/ /g, '-') : null
-    }));
+    const sectores = [
+      { name: 'Piantini', slug: 'piantini', count: 45, count_venta: 35, count_alquiler: 10, parent_slug: 'santo-domingo-d.n.' },
+      { name: 'Naco', slug: 'naco', count: 30, count_venta: 25, count_alquiler: 5, parent_slug: 'santo-domingo-d.n.' }
+    ];
 
     const provincias: any[] = [];
+
+    console.log('[Locations] Usando datos hardcoded de prueba');
 
   if ((!ciudades || ciudades.length === 0) && (!sectores || sectores.length === 0)) {
     console.log('[Locations] No hay datos de ubicaciones, retornando fallback');
