@@ -302,19 +302,46 @@ export async function handleLocations({
   try {
     const tenantId = tenant.id;
 
-    // Usar getPopularLocations que sabemos que funciona
-    let popularLocations: any = { cities: [], sectors: [] };
-    try {
-      console.log('[Locations] Llamando getPopularLocations con tenantId:', tenantId);
-      popularLocations = await db.getPopularLocations(tenantId);
-      console.log('[Locations] Resultado:', {
-        citiesCount: popularLocations?.cities?.length,
-        sectorsCount: popularLocations?.sectors?.length,
-        firstCity: popularLocations?.cities?.[0]
-      });
-    } catch (dbError: any) {
-      console.error('[Locations] ERROR en getPopularLocations:', dbError?.message || dbError);
-    }
+    // Consultar directamente desde la base de datos (replicando getPopularLocations inline)
+    const sql = db.getSQL();
+
+    const cities = await sql`
+      SELECT
+        ciudad as name,
+        LOWER(REPLACE(ciudad, ' ', '-')) as slug,
+        COUNT(*) as count
+      FROM propiedades
+      WHERE tenant_id = ${tenantId}
+        AND activo = true
+        AND estado_propiedad = 'disponible'
+        AND ciudad IS NOT NULL
+        AND ciudad != ''
+      GROUP BY ciudad
+      HAVING COUNT(*) >= 1
+      ORDER BY count DESC
+      LIMIT 8
+    `;
+
+    const sectors = await sql`
+      SELECT
+        sector as name,
+        LOWER(REPLACE(sector, ' ', '-')) as slug,
+        ciudad as city,
+        COUNT(*) as count
+      FROM propiedades
+      WHERE tenant_id = ${tenantId}
+        AND activo = true
+        AND estado_propiedad = 'disponible'
+        AND sector IS NOT NULL
+        AND sector != ''
+      GROUP BY sector, ciudad
+      HAVING COUNT(*) >= 1
+      ORDER BY count DESC
+      LIMIT 8
+    `;
+
+    const popularLocations = { cities, sectors };
+    console.log('[Locations] Query directa - cities:', cities?.length, 'sectors:', sectors?.length);
 
     // Adaptar formato al esperado por el handler
     const ciudades = (popularLocations.cities || []).map((c: any) => ({
