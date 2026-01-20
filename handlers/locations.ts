@@ -303,11 +303,9 @@ export async function handleLocations({
     const tenantId = tenant.id;
 
     // Usar getPopularLocations que sabemos que funciona
+    console.log('[Locations] Llamando getPopularLocations con tenantId:', tenantId);
     const popularLocations = await db.getPopularLocations(tenantId);
-    console.log('[Locations] Popular locations:', {
-      cities: popularLocations.cities?.length || 0,
-      sectors: popularLocations.sectors?.length || 0
-    });
+    console.log('[Locations] Resultado getPopularLocations:', JSON.stringify(popularLocations).substring(0, 500));
 
     // Adaptar formato al esperado por el handler
     const ciudades = (popularLocations.cities || []).map((c: any) => ({
