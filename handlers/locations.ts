@@ -306,17 +306,9 @@ export async function handleLocations({
 
   try {
     const tenantId = tenant.id;
-    console.log('[Locations] Step 1: Getting location stats for tenant:', tenantId, 'lang:', lang);
 
     // Usar getLocationStats (equivalente a getPropertyTypeStats pero para ubicaciones)
-    let locationStats;
-    try {
-      locationStats = await db.getLocationStats(tenantId);
-      console.log('[Locations] Step 2: Got stats, cities:', locationStats?.cities?.length, 'sectors:', locationStats?.sectors?.length);
-    } catch (dbError: any) {
-      console.error('[Locations] DB Error in getLocationStats:', dbError?.message);
-      throw new Error(`DB Error: ${dbError?.message}`);
-    }
+    const locationStats = await db.getLocationStats(tenantId);
 
     // Adaptar formato - los datos ya vienen con count_venta y count_alquiler
     const ciudades = (locationStats.cities || []).map((c: any) => ({
@@ -340,7 +332,6 @@ export async function handleLocations({
     const provincias: any[] = [];
 
   if ((!ciudades || ciudades.length === 0) && (!sectores || sectores.length === 0)) {
-    console.log('[Locations] No hay datos de ubicaciones, retornando fallback');
     // Fallback si no hay datos
     return {
       type: 'locations-main',
@@ -371,8 +362,6 @@ export async function handleLocations({
       trackingString,
     };
   }
-
-  console.log('[Locations] Step 3: Enriching cities, lang:', lang);
 
   // Enriquecer las ciudades con imágenes, iconos y descripciones
   const enrichedCities = (ciudades || []).map((city: any) => {
@@ -466,10 +455,7 @@ export async function handleLocations({
     return { name: city.name, slug: city.slug, properties: formattedProperties };
   });
 
-  console.log('[Locations] Step 4: Processing featured properties');
   const featuredResults = await Promise.all(featuredPromises);
-  console.log('[Locations] Step 5: Got featured results:', featuredResults.length);
-
   featuredResults.forEach(({ name, slug, properties }) => {
     if (properties.length > 0) {
       const carouselTitle = generateLocationCarouselTitle(name, slug, lang);
@@ -482,7 +468,6 @@ export async function handleLocations({
     }
   });
 
-  console.log('[Locations] Step 6: Generating SEO');
   // Calcular totales
   const totalCities = ciudades?.length || 0;
   const totalSectors = sectores?.length || 0;
@@ -532,7 +517,6 @@ export async function handleLocations({
     },
   ];
 
-  console.log('[Locations] Step 7: Building response');
   return {
     type: 'locations-main',
     pageType: 'locations-main',
@@ -600,7 +584,6 @@ export async function handleLocations({
       },
       featuredByLocation: {},
       seoContent: SEO_CONTENT[lang] || SEO_CONTENT.es,
-      _debug_error: errorMessage, // Temporalmente para ver el error
       seo: {
         title: lang === 'es' ? 'Ubicaciones | CLIC' :
               lang === 'en' ? 'Locations | CLIC' : 'Emplacements | CLIC',
