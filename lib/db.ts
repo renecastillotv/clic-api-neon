@@ -1115,21 +1115,17 @@ export async function getFeaturedPropertiesByType(
 
 /**
  * Obtiene estadísticas de ubicaciones (provincias, ciudades, sectores)
- * Siempre consulta directamente desde propiedades (más confiable)
+ * Usa el mismo estilo de query que getPopularLocations (que funciona)
  */
 export async function getLocationStats(tenantId: string) {
   const sql = getSQL();
 
-  // Consultar directamente desde propiedades (mismo enfoque que getPopularLocations que funciona)
-  // Ciudades
+  // Ciudades - usando EXACTAMENTE el mismo estilo que getPopularLocations
   const ciudades = await sql`
     SELECT
       ciudad as name,
       LOWER(REPLACE(ciudad, ' ', '-')) as slug,
-      COUNT(*) as count,
-      COUNT(*) FILTER (WHERE operacion = 'venta') as count_venta,
-      COUNT(*) FILTER (WHERE operacion = 'alquiler') as count_alquiler,
-      LOWER(REPLACE(MIN(provincia), ' ', '-')) as parent_slug
+      COUNT(*) as count
     FROM propiedades
     WHERE tenant_id = ${tenantId}
       AND activo = true
@@ -1137,6 +1133,7 @@ export async function getLocationStats(tenantId: string) {
       AND ciudad IS NOT NULL
       AND ciudad != ''
     GROUP BY ciudad
+    HAVING COUNT(*) >= 1
     ORDER BY count DESC
     LIMIT 30
   `;
@@ -1146,10 +1143,7 @@ export async function getLocationStats(tenantId: string) {
     SELECT
       sector as name,
       LOWER(REPLACE(sector, ' ', '-')) as slug,
-      COUNT(*) as count,
-      COUNT(*) FILTER (WHERE operacion = 'venta') as count_venta,
-      COUNT(*) FILTER (WHERE operacion = 'alquiler') as count_alquiler,
-      LOWER(REPLACE(MIN(ciudad), ' ', '-')) as parent_slug
+      COUNT(*) as count
     FROM propiedades
     WHERE tenant_id = ${tenantId}
       AND activo = true
@@ -1157,6 +1151,7 @@ export async function getLocationStats(tenantId: string) {
       AND sector IS NOT NULL
       AND sector != ''
     GROUP BY sector
+    HAVING COUNT(*) >= 1
     ORDER BY count DESC
     LIMIT 50
   `;
@@ -1166,9 +1161,7 @@ export async function getLocationStats(tenantId: string) {
     SELECT
       provincia as name,
       LOWER(REPLACE(provincia, ' ', '-')) as slug,
-      COUNT(*) as count,
-      COUNT(*) FILTER (WHERE operacion = 'venta') as count_venta,
-      COUNT(*) FILTER (WHERE operacion = 'alquiler') as count_alquiler
+      COUNT(*) as count
     FROM propiedades
     WHERE tenant_id = ${tenantId}
       AND activo = true
@@ -1176,6 +1169,7 @@ export async function getLocationStats(tenantId: string) {
       AND provincia IS NOT NULL
       AND provincia != ''
     GROUP BY provincia
+    HAVING COUNT(*) >= 1
     ORDER BY count DESC
     LIMIT 20
   `;
