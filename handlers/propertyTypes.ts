@@ -5,24 +5,88 @@ import db from '../lib/db';
 import utils from '../lib/utils';
 import type { TenantConfig } from '../types';
 
-// Iconos y colores por tipo de propiedad
-const TYPE_CONFIG: Record<string, { icon: string; color: string }> = {
-  apartamento: { icon: '🏢', color: '#3B82F6' },
-  casa: { icon: '🏠', color: '#10B981' },
-  villa: { icon: '🏰', color: '#8B5CF6' },
-  penthouse: { icon: '🌆', color: '#F59E0B' },
-  terreno: { icon: '🌳', color: '#22C55E' },
-  'locales-comerciales': { icon: '🏪', color: '#EF4444' },
-  'local-comercial': { icon: '🏪', color: '#EF4444' },
-  local: { icon: '🏪', color: '#EF4444' },
-  oficina: { icon: '🏛️', color: '#6366F1' },
-  townhouse: { icon: '🏘️', color: '#14B8A6' },
-  loft: { icon: '🏙️', color: '#EC4899' },
-  lofts: { icon: '🏙️', color: '#EC4899' },
-  edificio: { icon: '🏗️', color: '#F97316' },
-  edificios: { icon: '🏗️', color: '#F97316' },
-  hotel: { icon: '🏨', color: '#0EA5E9' },
-  hoteles: { icon: '🏨', color: '#0EA5E9' },
+// Iconos, colores e imágenes por tipo de propiedad
+const TYPE_CONFIG: Record<string, { icon: string; color: string; image?: string }> = {
+  apartamento: {
+    icon: '🏢',
+    color: '#3B82F6',
+    image: 'https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?w=800&q=80'
+  },
+  casa: {
+    icon: '🏠',
+    color: '#10B981',
+    image: 'https://images.unsplash.com/photo-1613977257363-707ba9348227?w=800&q=80'
+  },
+  villa: {
+    icon: '🏰',
+    color: '#8B5CF6',
+    image: 'https://images.unsplash.com/photo-1613490493576-7fde63acd811?w=800&q=80'
+  },
+  penthouse: {
+    icon: '🌆',
+    color: '#F59E0B',
+    image: 'https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=800&q=80'
+  },
+  terreno: {
+    icon: '🌳',
+    color: '#22C55E',
+    image: 'https://images.unsplash.com/photo-1500382017468-9049fed747ef?w=800&q=80'
+  },
+  'locales-comerciales': {
+    icon: '🏪',
+    color: '#EF4444',
+    image: 'https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=800&q=80'
+  },
+  'local-comercial': {
+    icon: '🏪',
+    color: '#EF4444',
+    image: 'https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=800&q=80'
+  },
+  local: {
+    icon: '🏪',
+    color: '#EF4444',
+    image: 'https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=800&q=80'
+  },
+  oficina: {
+    icon: '🏛️',
+    color: '#6366F1',
+    image: 'https://images.unsplash.com/photo-1497366216548-37526070297c?w=800&q=80'
+  },
+  townhouse: {
+    icon: '🏘️',
+    color: '#14B8A6',
+    image: 'https://images.unsplash.com/photo-1605276374104-dee2a0ed3cd6?w=800&q=80'
+  },
+  loft: {
+    icon: '🏙️',
+    color: '#EC4899',
+    image: 'https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?w=800&q=80'
+  },
+  lofts: {
+    icon: '🏙️',
+    color: '#EC4899',
+    image: 'https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?w=800&q=80'
+  },
+  edificio: {
+    icon: '🏗️',
+    color: '#F97316',
+    image: 'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=800&q=80'
+  },
+  edificios: {
+    icon: '🏗️',
+    color: '#F97316',
+    image: 'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=800&q=80'
+  },
+  hotel: {
+    icon: '🏨',
+    color: '#0EA5E9',
+    image: 'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800&q=80'
+  },
+  hoteles: {
+    icon: '🏨',
+    color: '#0EA5E9',
+    image: 'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800&q=80'
+  },
 };
 
 // Traducciones de tipos de propiedad
@@ -48,35 +112,112 @@ const TYPE_TRANSLATIONS: Record<string, Record<string, string>> = {
 // Descripciones SEO por tipo
 const TYPE_DESCRIPTIONS: Record<string, Record<string, string>> = {
   apartamento: {
-    es: 'Modernos espacios urbanos con todas las comodidades',
-    en: 'Modern urban spaces with all amenities',
-    fr: 'Espaces urbains modernes avec toutes les commodités'
+    es: 'Apartamentos modernos en las mejores zonas de República Dominicana. Desde estudios hasta unidades de lujo con amenidades premium.',
+    en: 'Modern apartments in the best areas of Dominican Republic. From studios to luxury units with premium amenities.',
+    fr: 'Appartements modernes dans les meilleures zones de République Dominicaine. Des studios aux unités de luxe.'
   },
   casa: {
-    es: 'Espacios familiares amplios y confortables',
-    en: 'Spacious and comfortable family homes',
-    fr: 'Maisons familiales spacieuses et confortables'
+    es: 'Casas familiares con espacios amplios, jardines y parqueos. Ideales para quienes buscan privacidad y comodidad.',
+    en: 'Family homes with spacious layouts, gardens and parking. Ideal for those seeking privacy and comfort.',
+    fr: 'Maisons familiales avec espaces généreux, jardins et parkings. Idéales pour ceux qui recherchent intimité et confort.'
   },
   villa: {
-    es: 'Lujo y exclusividad en ubicaciones privilegiadas',
-    en: 'Luxury and exclusivity in prime locations',
-    fr: 'Luxe et exclusivité dans des emplacements privilégiés'
+    es: 'Villas de lujo con piscina privada en Punta Cana, Cap Cana y Casa de Campo. Exclusividad y confort en el Caribe.',
+    en: 'Luxury villas with private pool in Punta Cana, Cap Cana and Casa de Campo. Exclusivity and comfort in the Caribbean.',
+    fr: 'Villas de luxe avec piscine privée à Punta Cana, Cap Cana et Casa de Campo. Exclusivité et confort dans les Caraïbes.'
   },
   penthouse: {
-    es: 'Vistas panorámicas únicas y acabados premium',
-    en: 'Unique panoramic views and premium finishes',
-    fr: 'Vues panoramiques uniques et finitions premium'
+    es: 'Penthouses con vistas panorámicas y terrazas amplias. El máximo nivel de exclusividad en bienes raíces.',
+    en: 'Penthouses with panoramic views and spacious terraces. The highest level of real estate exclusivity.',
+    fr: 'Penthouses avec vues panoramiques et grandes terrasses. Le plus haut niveau d\'exclusivité immobilière.'
   },
   terreno: {
-    es: 'Oportunidades de inversión y desarrollo',
-    en: 'Investment and development opportunities',
-    fr: 'Opportunités d\'investissement et de développement'
+    es: 'Terrenos y solares para construcción o inversión. Oportunidades en zonas residenciales, turísticas y comerciales.',
+    en: 'Land and lots for construction or investment. Opportunities in residential, tourist and commercial areas.',
+    fr: 'Terrains et lots pour construction ou investissement. Opportunités dans des zones résidentielles, touristiques et commerciales.'
   },
   'locales-comerciales': {
-    es: 'Espacios ideales para tu negocio',
-    en: 'Ideal spaces for your business',
-    fr: 'Espaces idéaux pour votre entreprise'
+    es: 'Locales comerciales en ubicaciones estratégicas con alto flujo peatonal. Perfectos para tu negocio.',
+    en: 'Commercial spaces in strategic locations with high foot traffic. Perfect for your business.',
+    fr: 'Locaux commerciaux dans des emplacements stratégiques avec fort trafic piéton. Parfaits pour votre entreprise.'
   },
+  oficina: {
+    es: 'Oficinas corporativas y espacios de coworking en torres empresariales de Santo Domingo y Santiago.',
+    en: 'Corporate offices and coworking spaces in business towers in Santo Domingo and Santiago.',
+    fr: 'Bureaux corporatifs et espaces de coworking dans des tours d\'affaires à Saint-Domingue et Santiago.'
+  },
+  townhouse: {
+    es: 'Townhouses modernos con diseño inteligente. Combinan la privacidad de una casa con la seguridad de un condominio.',
+    en: 'Modern townhouses with smart design. Combining the privacy of a house with the security of a condo.',
+    fr: 'Maisons de ville modernes au design intelligent. Combinant l\'intimité d\'une maison avec la sécurité d\'un condo.'
+  },
+  loft: {
+    es: 'Lofts con espacios abiertos y techos altos. Diseño contemporáneo para un estilo de vida urbano.',
+    en: 'Lofts with open spaces and high ceilings. Contemporary design for an urban lifestyle.',
+    fr: 'Lofts avec espaces ouverts et hauts plafonds. Design contemporain pour un style de vie urbain.'
+  },
+  lofts: {
+    es: 'Lofts con espacios abiertos y techos altos. Diseño contemporáneo para un estilo de vida urbano.',
+    en: 'Lofts with open spaces and high ceilings. Contemporary design for an urban lifestyle.',
+    fr: 'Lofts avec espaces ouverts et hauts plafonds. Design contemporain pour un style de vie urbain.'
+  },
+  edificio: {
+    es: 'Edificios completos para inversión o desarrollo inmobiliario. Oportunidades de alto rendimiento.',
+    en: 'Complete buildings for investment or real estate development. High-yield opportunities.',
+    fr: 'Bâtiments complets pour investissement ou développement immobilier. Opportunités à haut rendement.'
+  },
+  edificios: {
+    es: 'Edificios completos para inversión o desarrollo inmobiliario. Oportunidades de alto rendimiento.',
+    en: 'Complete buildings for investment or real estate development. High-yield opportunities.',
+    fr: 'Bâtiments complets pour investissement ou développement immobilier. Opportunités à haut rendement.'
+  },
+  hotel: {
+    es: 'Hoteles y proyectos hoteleros en zonas turísticas. Inversión con alta rentabilidad en el Caribe.',
+    en: 'Hotels and hotel projects in tourist areas. High-yield investment in the Caribbean.',
+    fr: 'Hôtels et projets hôteliers dans des zones touristiques. Investissement à haut rendement dans les Caraïbes.'
+  },
+  hoteles: {
+    es: 'Hoteles y proyectos hoteleros en zonas turísticas. Inversión con alta rentabilidad en el Caribe.',
+    en: 'Hotels and hotel projects in tourist areas. High-yield investment in the Caribbean.',
+    fr: 'Hôtels et projets hôteliers dans des zones touristiques. Investissement à haut rendement dans les Caraïbes.'
+  },
+};
+
+// Texto SEO para la página (contenido enriquecido)
+const SEO_CONTENT: Record<string, { intro: string; benefits: string[]; cta: string }> = {
+  es: {
+    intro: 'En CLIC Inmobiliaria te ayudamos a encontrar la propiedad perfecta en República Dominicana. Contamos con un amplio catálogo de apartamentos, casas, villas, terrenos y locales comerciales en las mejores ubicaciones del país, incluyendo Santo Domingo, Punta Cana, Santiago, La Romana y más.',
+    benefits: [
+      'Más de 200 propiedades verificadas disponibles',
+      'Asesoría personalizada con agentes certificados',
+      'Opciones de financiamiento y facilidades de pago',
+      'Propiedades en zonas exclusivas y de alta plusvalía',
+      'Acompañamiento legal en todo el proceso de compra'
+    ],
+    cta: '¿Listo para encontrar tu próxima propiedad? Explora nuestras categorías o contáctanos para una asesoría personalizada.'
+  },
+  en: {
+    intro: 'At CLIC Real Estate we help you find the perfect property in the Dominican Republic. We have a wide catalog of apartments, houses, villas, land and commercial spaces in the best locations in the country, including Santo Domingo, Punta Cana, Santiago, La Romana and more.',
+    benefits: [
+      'Over 200 verified properties available',
+      'Personalized advice with certified agents',
+      'Financing options and payment facilities',
+      'Properties in exclusive and high-value areas',
+      'Legal support throughout the buying process'
+    ],
+    cta: 'Ready to find your next property? Explore our categories or contact us for personalized advice.'
+  },
+  fr: {
+    intro: 'Chez CLIC Immobilier, nous vous aidons à trouver la propriété parfaite en République Dominicaine. Nous disposons d\'un large catalogue d\'appartements, maisons, villas, terrains et locaux commerciaux dans les meilleurs emplacements du pays.',
+    benefits: [
+      'Plus de 200 propriétés vérifiées disponibles',
+      'Conseils personnalisés avec des agents certifiés',
+      'Options de financement et facilités de paiement',
+      'Propriétés dans des zones exclusives à forte plus-value',
+      'Accompagnement juridique tout au long du processus d\'achat'
+    ],
+    cta: 'Prêt à trouver votre prochaine propriété? Explorez nos catégories ou contactez-nous pour des conseils personnalisés.'
+  }
 };
 
 interface PropertyTypesHandlerParams {
@@ -137,8 +278,8 @@ export async function handlePropertyTypes({
       color: config.color,
       description: description,
       seo_description: description,
-      hasEnrichedData: false, // No tenemos imágenes por ahora
-      hero_image: null,
+      hasEnrichedData: !!config.image,
+      hero_image: config.image || null,
     };
   });
 
@@ -251,6 +392,7 @@ export async function handlePropertyTypes({
     remainingTypes: remainingTypes,
     featuredByType,
     totalProperties,
+    seoContent: SEO_CONTENT[language] || SEO_CONTENT.es,
     seo: {
       title: seoTitle,
       description: seoDescription,
