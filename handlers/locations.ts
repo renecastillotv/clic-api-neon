@@ -390,6 +390,8 @@ export async function handleLocations({
   // Obtener propiedades destacadas para las top 4 ciudades
   const featuredByLocation: Record<string, any> = {};
 
+  // TODO: Temporalmente deshabilitado para diagnosticar
+  /*
   const featuredPromises = featuredCities.map(async (city: any) => {
     const properties = await db.getFeaturedPropertiesByLocation(tenantId, city.slug, 'ciudad', 6);
 
@@ -437,18 +439,8 @@ export async function handleLocations({
     return { name: city.name, slug: city.slug, properties: formattedProperties };
   });
 
-  const featuredResults = await Promise.all(featuredPromises);
-  featuredResults.forEach(({ name, slug, properties }) => {
-    if (properties.length > 0) {
-      const carouselTitle = generateLocationCarouselTitle(name, slug, language);
-      featuredByLocation[name] = {
-        properties,
-        title: carouselTitle.title,
-        subtitle: carouselTitle.subtitle,
-        slug,
-      };
-    }
-  });
+  // Fin del código comentado
+  */
 
   // Calcular totales
   const totalCities = ciudades?.length || 0;
