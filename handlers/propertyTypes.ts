@@ -220,6 +220,165 @@ const SEO_CONTENT: Record<string, { intro: string; benefits: string[]; cta: stri
   }
 };
 
+// Títulos SEO descriptivos para los carruseles
+function generateCarouselTitle(typeName: string, slug: string, language: string): { title: string; subtitle: string } {
+  const titles: Record<string, Record<string, { title: string; subtitle: string }>> = {
+    apartamento: {
+      es: {
+        title: `Descubre ${typeName} que destacan en República Dominicana`,
+        subtitle: 'Espacios modernos en las mejores ubicaciones urbanas del país'
+      },
+      en: {
+        title: `Discover Outstanding ${typeName} in Dominican Republic`,
+        subtitle: 'Modern spaces in the best urban locations in the country'
+      },
+      fr: {
+        title: `Découvrez des ${typeName} exceptionnels en République Dominicaine`,
+        subtitle: 'Espaces modernes dans les meilleures emplacements urbains du pays'
+      }
+    },
+    casa: {
+      es: {
+        title: `Explora ${typeName} que sobresalen por sus características`,
+        subtitle: 'Hogares familiares con espacios amplios, jardines y comodidades'
+      },
+      en: {
+        title: `Explore ${typeName} that stand out for their features`,
+        subtitle: 'Family homes with spacious layouts, gardens and amenities'
+      },
+      fr: {
+        title: `Explorez des ${typeName} qui se distinguent par leurs caractéristiques`,
+        subtitle: 'Maisons familiales avec espaces généreux, jardins et commodités'
+      }
+    },
+    villa: {
+      es: {
+        title: `${typeName} de lujo en destinos exclusivos del Caribe`,
+        subtitle: 'Exclusividad y confort en Punta Cana, Cap Cana y Casa de Campo'
+      },
+      en: {
+        title: `Luxury ${typeName} in exclusive Caribbean destinations`,
+        subtitle: 'Exclusivity and comfort in Punta Cana, Cap Cana and Casa de Campo'
+      },
+      fr: {
+        title: `${typeName} de luxe dans des destinations caribéennes exclusives`,
+        subtitle: 'Exclusivité et confort à Punta Cana, Cap Cana et Casa de Campo'
+      }
+    },
+    terreno: {
+      es: {
+        title: `${typeName} ideales para desarrollo de proyectos`,
+        subtitle: 'Solares deslindados con potencial para construcción e inversión'
+      },
+      en: {
+        title: `${typeName} ideal for project development`,
+        subtitle: 'Surveyed lots with potential for construction and investment'
+      },
+      fr: {
+        title: `${typeName} idéaux pour le développement de projets`,
+        subtitle: 'Terrains délimités avec potentiel de construction et d\'investissement'
+      }
+    },
+    penthouse: {
+      es: {
+        title: `${typeName} con vistas panorámicas impresionantes`,
+        subtitle: 'El máximo nivel de exclusividad en bienes raíces dominicanos'
+      },
+      en: {
+        title: `${typeName} with impressive panoramic views`,
+        subtitle: 'The highest level of exclusivity in Dominican real estate'
+      },
+      fr: {
+        title: `${typeName} avec des vues panoramiques impressionnantes`,
+        subtitle: 'Le plus haut niveau d\'exclusivité dans l\'immobilier dominicain'
+      }
+    },
+    'locales-comerciales': {
+      es: {
+        title: `${typeName} en ubicaciones estratégicas`,
+        subtitle: 'Espacios comerciales con alto flujo peatonal para tu negocio'
+      },
+      en: {
+        title: `${typeName} in strategic locations`,
+        subtitle: 'Commercial spaces with high foot traffic for your business'
+      },
+      fr: {
+        title: `${typeName} dans des emplacements stratégiques`,
+        subtitle: 'Espaces commerciaux à fort trafic piétonnier pour votre entreprise'
+      }
+    },
+    local: {
+      es: {
+        title: `${typeName} en ubicaciones estratégicas`,
+        subtitle: 'Espacios comerciales con alto flujo peatonal para tu negocio'
+      },
+      en: {
+        title: `${typeName} in strategic locations`,
+        subtitle: 'Commercial spaces with high foot traffic for your business'
+      },
+      fr: {
+        title: `${typeName} dans des emplacements stratégiques`,
+        subtitle: 'Espaces commerciaux à fort trafic piétonnier pour votre entreprise'
+      }
+    },
+    oficina: {
+      es: {
+        title: `${typeName} en torres empresariales de primer nivel`,
+        subtitle: 'Espacios corporativos en Santo Domingo y Santiago'
+      },
+      en: {
+        title: `${typeName} in first-class business towers`,
+        subtitle: 'Corporate spaces in Santo Domingo and Santiago'
+      },
+      fr: {
+        title: `${typeName} dans des tours d\'affaires de premier plan`,
+        subtitle: 'Espaces corporatifs à Saint-Domingue et Santiago'
+      }
+    },
+    townhouse: {
+      es: {
+        title: `${typeName} modernos con diseño inteligente`,
+        subtitle: 'Privacidad de casa con la seguridad de un condominio'
+      },
+      en: {
+        title: `Modern ${typeName} with smart design`,
+        subtitle: 'Privacy of a house with the security of a condo'
+      },
+      fr: {
+        title: `${typeName} modernes au design intelligent`,
+        subtitle: 'Intimité d\'une maison avec la sécurité d\'un condo'
+      }
+    }
+  };
+
+  // Normalizar el slug para buscar en el objeto
+  const normalizedSlug = slug.toLowerCase().replace(/-/g, '');
+  const matchingKey = Object.keys(titles).find(key =>
+    key.replace(/-/g, '') === normalizedSlug ||
+    slug.toLowerCase().includes(key)
+  ) || slug;
+
+  const langTitles = titles[matchingKey]?.[language] || titles[matchingKey]?.es;
+
+  if (langTitles) {
+    return langTitles;
+  }
+
+  // Fallback genérico
+  return {
+    title: language === 'es'
+      ? `Selección destacada de ${typeName}`
+      : language === 'en'
+      ? `Featured selection of ${typeName}`
+      : `Sélection en vedette de ${typeName}`,
+    subtitle: language === 'es'
+      ? 'Propiedades seleccionadas por su calidad y ubicación'
+      : language === 'en'
+      ? 'Properties selected for their quality and location'
+      : 'Propriétés sélectionnées pour leur qualité et leur emplacement'
+  };
+}
+
 interface PropertyTypesHandlerParams {
   tenant: TenantConfig;
   language: string;
@@ -294,46 +453,62 @@ export async function handlePropertyTypes({
   const featuredPromises = featuredTypes.map(async (typeData: any) => {
     const properties = await db.getFeaturedPropertiesByType(tenantId, typeData.slug, 6);
 
-    // Formatear propiedades para el carousel
+    // Formatear propiedades para el carousel (nombres en español como espera PropertyCarousel)
     const formattedProperties = properties.map((p: any) => {
       const operationType = p.operacion || 'venta';
       const price = operationType === 'venta'
         ? (p.precio_venta || p.precio || 0)
         : (p.precio_alquiler || p.precio || 0);
 
+      // Parsear imágenes si es un string JSON
+      let imagenes: string[] = [];
+      if (p.imagenes) {
+        try {
+          imagenes = typeof p.imagenes === 'string' ? JSON.parse(p.imagenes) : p.imagenes;
+        } catch {
+          imagenes = [];
+        }
+      }
+      if (p.imagen_principal && !imagenes.includes(p.imagen_principal)) {
+        imagenes.unshift(p.imagen_principal);
+      }
+
       return {
         id: p.id,
-        title: p.titulo,
         slug: p.slug,
-        type: p.tipo,
-        operation: operationType,
-        price: price,
-        currency: p.moneda || 'USD',
-        bedrooms: p.habitaciones,
-        bathrooms: p.banos,
-        parking: p.estacionamientos,
-        area: p.m2_construccion || p.m2_terreno,
-        mainImage: p.imagen_principal,
-        location: [p.sector, p.ciudad].filter(Boolean).join(', '),
-        sector: p.sector,
-        city: p.ciudad,
-        province: p.provincia,
-        featured: p.destacada,
-        isProject: p.is_project,
-        // Display strings
-        title_display: p.titulo,
-        price_display: utils.formatPrice(price, p.moneda || 'USD', operationType, language),
-        location_display: [p.sector, p.ciudad].filter(Boolean).join(', '),
+        url: `/${p.slug}`,
+        // Nombres en español para PropertyCarousel
+        titulo: p.titulo || '',
+        precio: utils.formatPrice(price, p.moneda || 'USD', operationType, language),
+        imagen: p.imagen_principal || '',
+        imagenes: imagenes.length > 0 ? imagenes : (p.imagen_principal ? [p.imagen_principal] : []),
+        sector: [p.sector, p.ciudad].filter(Boolean).join(', '),
+        habitaciones: p.habitaciones || 0,
+        banos: p.banos || 0,
+        metros: p.m2_construccion || p.m2_terreno || 0,
+        metros_terreno: p.m2_terreno || 0,
+        parqueos: p.estacionamientos || 0,
+        tipo: p.tipo || '',
+        code: p.codigo || '',
+        destacado: p.destacada || false,
+        is_project: p.is_project || false,
       };
     });
 
-    return { type: typeData.type, properties: formattedProperties };
+    return { type: typeData.type, slug: typeData.slug, properties: formattedProperties };
   });
 
   const featuredResults = await Promise.all(featuredPromises);
-  featuredResults.forEach(({ type, properties }) => {
+  featuredResults.forEach(({ type, slug, properties }) => {
     if (properties.length > 0) {
-      featuredByType[type] = properties;
+      // Generar título y subtítulo SEO descriptivo para cada tipo
+      const carouselTitle = generateCarouselTitle(type, slug, language);
+      featuredByType[type] = {
+        properties,
+        title: carouselTitle.title,
+        subtitle: carouselTitle.subtitle,
+        slug,
+      };
     }
   });
 

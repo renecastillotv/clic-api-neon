@@ -1093,6 +1093,8 @@ export async function getFeaturedPropertiesByType(
       p.m2_construccion,
       p.m2_terreno,
       p.imagen_principal,
+      p.imagenes,
+      p.codigo,
       p.sector,
       p.ciudad,
       p.provincia,
@@ -1103,6 +1105,8 @@ export async function getFeaturedPropertiesByType(
       AND LOWER(p.tipo) = LOWER(${propertyType})
       AND p.activo = true
       AND p.estado_propiedad = 'disponible'
+      AND p.imagen_principal IS NOT NULL
+      AND p.imagen_principal != ''
     ORDER BY p.destacada DESC, p.created_at DESC
     LIMIT ${limit}
   `;
