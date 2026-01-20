@@ -1014,6 +1014,134 @@ export async function getRecentVideos(tenantId: string, limit: number = 4) {
   return result;
 }
 
+// ============================================================================
+// STATS CACHE - Funciones para obtener estadísticas pre-calculadas
+// ============================================================================
+
+/**
+ * Obtiene estadísticas de una categoría específica desde stats_cache
+ */
+export async function getStatsByCategory(
+  tenantId: string,
+  category: 'tipo' | 'provincia' | 'ciudad' | 'sector' | 'operacion',
+  limit: number = 50
+) {
+  const sql = getSQL();
+  const result = await sql`
+    SELECT
+      slug,
+      display_name,
+      count,
+      count_venta,
+      count_alquiler,
+      parent_slug,
+      metadata
+    FROM stats_cache
+    WHERE tenant_id = ${tenantId}
+      AND category = ${category}
+      AND count > 0
+    ORDER BY count DESC
+    LIMIT ${limit}
+  `;
+  return result;
+}
+
+/**
+ * Obtiene todos los tipos de propiedad con sus conteos
+ */
+export async function getPropertyTypeStats(tenantId: string) {
+  const sql = getSQL();
+  const result = await sql`
+    SELECT
+      slug,
+      display_name as type,
+      count,
+      count_venta,
+      count_alquiler
+    FROM stats_cache
+    WHERE tenant_id = ${tenantId}
+      AND category = 'tipo'
+      AND count > 0
+    ORDER BY count DESC
+  `;
+  return result;
+}
+
+/**
+ * Obtiene propiedades destacadas de un tipo específico
+ */
+export async function getFeaturedPropertiesByType(
+  tenantId: string,
+  propertyType: string,
+  limit: number = 6
+) {
+  const sql = getSQL();
+  const result = await sql`
+    SELECT
+      p.id,
+      p.titulo,
+      p.slug,
+      p.tipo,
+      p.operacion,
+      p.precio,
+      p.precio_venta,
+      p.precio_alquiler,
+      p.moneda,
+      p.habitaciones,
+      p.banos,
+      p.parqueos,
+      p.m2_construccion,
+      p.m2_terreno,
+      p.imagen_principal,
+      p.sector,
+      p.ciudad,
+      p.provincia,
+      p.destacado,
+      p.is_project
+    FROM propiedades p
+    WHERE p.tenant_id = ${tenantId}
+      AND LOWER(p.tipo) = LOWER(${propertyType})
+      AND p.activo = true
+      AND p.estado_propiedad = 'disponible'
+    ORDER BY p.destacado DESC, p.created_at DESC
+    LIMIT ${limit}
+  `;
+  return result;
+}
+
+/**
+ * Obtiene estadísticas de ubicaciones (provincias, ciudades, sectores)
+ */
+export async function getLocationStats(tenantId: string) {
+  const sql = getSQL();
+
+  const [provincias, ciudades, sectores] = await Promise.all([
+    sql`
+      SELECT slug, display_name as name, count, count_venta, count_alquiler
+      FROM stats_cache
+      WHERE tenant_id = ${tenantId} AND category = 'provincia' AND count > 0
+      ORDER BY count DESC
+      LIMIT 20
+    `,
+    sql`
+      SELECT slug, display_name as name, count, count_venta, count_alquiler, parent_slug
+      FROM stats_cache
+      WHERE tenant_id = ${tenantId} AND category = 'ciudad' AND count > 0
+      ORDER BY count DESC
+      LIMIT 30
+    `,
+    sql`
+      SELECT slug, display_name as name, count, count_venta, count_alquiler, parent_slug
+      FROM stats_cache
+      WHERE tenant_id = ${tenantId} AND category = 'sector' AND count > 0
+      ORDER BY count DESC
+      LIMIT 50
+    `
+  ]);
+
+  return { provincias, ciudades, sectores };
+}
+
 export default {
   getSQL,
   query,
@@ -1045,5 +1173,10 @@ export default {
   getAmenityDetails,
   getSimilarProperties,
   getCocaptadoresData,
-  getRecentVideos
+  getRecentVideos,
+  // Stats cache
+  getStatsByCategory,
+  getPropertyTypeStats,
+  getFeaturedPropertiesByType,
+  getLocationStats
 };

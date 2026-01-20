@@ -16,6 +16,7 @@ import sellHandler from '../handlers/sell';
 import favoritesHandler from '../handlers/favorites';
 import proposalsHandler from '../handlers/proposals';
 import contactHandler from '../handlers/contact';
+import propertyTypesHandler from '../handlers/propertyTypes';
 
 import type { TenantConfig, ApiResponse, Error404Response } from '../types';
 
@@ -445,19 +446,12 @@ export default async function handler(request: Request): Promise<Response> {
         break;
 
       case 'property-types':
-        // TODO: Implementar handler de tipos de propiedad
-        response = {
-          type: 'property-types-main',
-          language,
+        response = await propertyTypesHandler.handlePropertyTypes({
           tenant,
-          seo: utils.generateSEO({
-            title: 'Tipos de Propiedad',
-            description: 'Explora propiedades por tipo',
-            language,
-            canonicalUrl: pathname,
-          }),
+          language,
+          pathname,
           trackingString,
-        } as any;
+        }) as any;
         break;
 
       case 'legal-terms':
