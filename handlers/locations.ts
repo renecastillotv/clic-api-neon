@@ -265,7 +265,9 @@ function generateLocationCarouselTitle(locationName: string, slug: string, langu
     }
   };
 
-  const langTitles = titles[slug]?.[language] || titles[slug]?.es;
+  const lang = language || 'es';
+  const titleData = titles[slug];
+  const langTitles = titleData?.[lang] || titleData?.es;
 
   if (langTitles) {
     return langTitles;
@@ -273,14 +275,14 @@ function generateLocationCarouselTitle(locationName: string, slug: string, langu
 
   // Fallback genérico
   return {
-    title: language === 'es'
+    title: lang === 'es'
       ? `Propiedades disponibles en ${locationName}`
-      : language === 'en'
+      : lang === 'en'
       ? `Available properties in ${locationName}`
       : `Propriétés disponibles à ${locationName}`,
-    subtitle: language === 'es'
+    subtitle: lang === 'es'
       ? 'Encuentra tu próxima inversión en esta ubicación privilegiada'
-      : language === 'en'
+      : lang === 'en'
       ? 'Find your next investment in this prime location'
       : 'Trouvez votre prochain investissement dans cet emplacement privilégié'
   };
