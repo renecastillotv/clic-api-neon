@@ -303,9 +303,11 @@ export async function handleLocations({
 }: LocationsHandlerParams) {
   try {
     const tenantId = tenant.id;
+    console.log('[Locations] Step 1: Getting location stats for tenant:', tenantId);
 
     // Usar getLocationStats (equivalente a getPropertyTypeStats pero para ubicaciones)
     const locationStats = await db.getLocationStats(tenantId);
+    console.log('[Locations] Step 2: Got stats, cities:', locationStats?.cities?.length, 'sectors:', locationStats?.sectors?.length);
 
     // Adaptar formato - los datos ya vienen con count_venta y count_alquiler
     const ciudades = (locationStats.cities || []).map((c: any) => ({
@@ -361,10 +363,14 @@ export async function handleLocations({
     };
   }
 
+  console.log('[Locations] Step 3: Enriching cities, language:', language);
+  const lang = language || 'es';
+
   // Enriquecer las ciudades con imágenes, iconos y descripciones
   const enrichedCities = (ciudades || []).map((city: any) => {
     const config = CITY_CONFIG[city.slug] || { icon: '📍', color: '#6B7280' };
-    const description = CITY_DESCRIPTIONS[city.slug]?.[language] || '';
+    const cityDescs = CITY_DESCRIPTIONS[city.slug];
+    const description = cityDescs ? (cityDescs[lang] || cityDescs.es || '') : '';
 
     return {
       name: city.name,
@@ -448,10 +454,13 @@ export async function handleLocations({
     return { name: city.name, slug: city.slug, properties: formattedProperties };
   });
 
+  console.log('[Locations] Step 4: Processing featured properties');
   const featuredResults = await Promise.all(featuredPromises);
+  console.log('[Locations] Step 5: Got featured results:', featuredResults.length);
+
   featuredResults.forEach(({ name, slug, properties }) => {
     if (properties.length > 0) {
-      const carouselTitle = generateLocationCarouselTitle(name, slug, language);
+      const carouselTitle = generateLocationCarouselTitle(name, slug, lang);
       featuredByLocation[name] = {
         properties,
         title: carouselTitle.title,
@@ -461,6 +470,7 @@ export async function handleLocations({
     }
   });
 
+  console.log('[Locations] Step 6: Generating SEO');
   // Calcular totales
   const totalCities = ciudades?.length || 0;
   const totalSectors = sectores?.length || 0;
@@ -469,15 +479,15 @@ export async function handleLocations({
   // Generar SEO
   const topCities = enrichedCities.slice(0, 3).map((c: any) => c.name).join(', ');
 
-  const seoTitle = language === 'es'
+  const seoTitle = lang === 'es'
     ? `Ubicaciones | Propiedades en ${topCities} y más`
-    : language === 'en'
+    : lang === 'en'
     ? `Locations | Properties in ${topCities} and more`
     : `Emplacements | Propriétés à ${topCities} et plus`;
 
-  const seoDescription = language === 'es'
+  const seoDescription = lang === 'es'
     ? `Explora ${totalProperties} propiedades en ${totalCities} ciudades de República Dominicana. Encuentra casas, apartamentos y villas en ${topCities}.`
-    : language === 'en'
+    : lang === 'en'
     ? `Explore ${totalProperties} properties in ${totalCities} cities in the Dominican Republic. Find houses, apartments and villas in ${topCities}.`
     : `Explorez ${totalProperties} propriétés dans ${totalCities} villes en République Dominicaine. Trouvez maisons, appartements et villas à ${topCities}.`;
 
@@ -493,27 +503,28 @@ export async function handleLocations({
       position: index + 1,
       name: city.name,
       url: `${pathname.replace(/\/ubicaciones.*/, '')}/${city.slug}`,
-      description: `${city.count} ${language === 'es' ? 'propiedades disponibles' : 'properties available'}`,
+      description: `${city.count} ${lang === 'es' ? 'propiedades disponibles' : 'properties available'}`,
     })),
   };
 
   // Breadcrumbs
   const breadcrumbs = [
     {
-      name: language === 'es' ? 'Inicio' : language === 'en' ? 'Home' : 'Accueil',
+      name: lang === 'es' ? 'Inicio' : lang === 'en' ? 'Home' : 'Accueil',
       url: '/',
     },
     {
-      name: language === 'es' ? 'Ubicaciones' :
-            language === 'en' ? 'Locations' : 'Emplacements',
+      name: lang === 'es' ? 'Ubicaciones' :
+            lang === 'en' ? 'Locations' : 'Emplacements',
       url: pathname,
     },
   ];
 
+  console.log('[Locations] Step 7: Building response');
   return {
     type: 'locations-main',
     pageType: 'locations-main',
-    language,
+    language: lang,
     tenant,
     locations: {
       provinces: provincias || [],
@@ -527,17 +538,17 @@ export async function handleLocations({
       totalProperties,
     },
     featuredByLocation,
-    seoContent: SEO_CONTENT[language] || SEO_CONTENT.es,
+    seoContent: SEO_CONTENT[lang] || SEO_CONTENT.es,
     seo: {
       title: seoTitle,
       description: seoDescription,
-      h1: language === 'es' ? 'Explora Ubicaciones' :
-          language === 'en' ? 'Explore Locations' : 'Explorer les Emplacements',
-      h2: language === 'es' ? 'Encuentra propiedades en las mejores zonas de República Dominicana' :
-          language === 'en' ? 'Find properties in the best areas of the Dominican Republic' :
+      h1: lang === 'es' ? 'Explora Ubicaciones' :
+          lang === 'en' ? 'Explore Locations' : 'Explorer les Emplacements',
+      h2: lang === 'es' ? 'Encuentra propiedades en las mejores zonas de República Dominicana' :
+          lang === 'en' ? 'Find properties in the best areas of the Dominican Republic' :
           'Trouvez des propriétés dans les meilleures zones de la République Dominicaine',
       canonical_url: pathname,
-      keywords: `${topCities}, ${language === 'es' ? 'bienes raíces, propiedades, inmuebles, República Dominicana' : 'real estate, properties, Dominican Republic'}`,
+      keywords: `${topCities}, ${lang === 'es' ? 'bienes raíces, propiedades, inmuebles, República Dominicana' : 'real estate, properties, Dominican Republic'}`,
       breadcrumbs,
       structured_data: structuredData,
       open_graph: {
