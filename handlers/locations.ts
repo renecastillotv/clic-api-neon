@@ -310,14 +310,14 @@ export async function handleLocations({
     // Usar getLocationStats (equivalente a getPropertyTypeStats pero para ubicaciones)
     const locationStats = await db.getLocationStats(tenantId);
 
-    // Adaptar formato - los datos ya vienen con count_venta y count_alquiler
+    // Los datos vienen directamente de stats_cache con el formato correcto
     const ciudades = (locationStats.cities || []).map((c: any) => ({
       name: c.name,
       slug: c.slug,
       count: parseInt(c.count, 10) || 0,
       count_venta: parseInt(c.count_venta, 10) || 0,
       count_alquiler: parseInt(c.count_alquiler, 10) || 0,
-      parent_slug: null
+      parent_slug: c.parent_slug || null
     }));
 
     const sectores = (locationStats.sectors || []).map((s: any) => ({
@@ -329,7 +329,14 @@ export async function handleLocations({
       parent_slug: s.parent_slug || null
     }));
 
-    const provincias: any[] = [];
+    const provincias = (locationStats.provinces || []).map((p: any) => ({
+      name: p.name,
+      slug: p.slug,
+      count: parseInt(p.count, 10) || 0,
+      count_venta: parseInt(p.count_venta, 10) || 0,
+      count_alquiler: parseInt(p.count_alquiler, 10) || 0,
+      parent_slug: null
+    }));
 
   if ((!ciudades || ciudades.length === 0) && (!sectores || sectores.length === 0)) {
     // Fallback si no hay datos

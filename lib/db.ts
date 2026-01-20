@@ -1068,53 +1068,61 @@ export async function getPropertyTypeStats(tenantId: string) {
 }
 
 /**
- * Obtiene estadísticas de ciudades con conteos (equivalente a getPropertyTypeStats pero para ubicaciones)
- * Consulta directamente la tabla propiedades ya que stats_cache no tiene datos de ubicaciones
+ * Obtiene estadísticas de ubicaciones desde stats_cache (igual que getPropertyTypeStats)
+ * La tabla stats_cache tiene categorías: ciudad, sector, provincia
  */
 export async function getLocationStats(tenantId: string) {
   const sql = getSQL();
 
-  // Ciudades con conteos
+  // Ciudades desde stats_cache
   const cities = await sql`
     SELECT
-      ciudad as name,
-      LOWER(REPLACE(REPLACE(ciudad, ' ', '-'), '.', '')) as slug,
-      COUNT(*) as count,
-      COUNT(*) FILTER (WHERE operacion = 'venta') as count_venta,
-      COUNT(*) FILTER (WHERE operacion = 'alquiler') as count_alquiler
-    FROM propiedades
+      slug,
+      display_name as name,
+      count,
+      count_venta,
+      count_alquiler,
+      parent_slug
+    FROM stats_cache
     WHERE tenant_id = ${tenantId}
-      AND activo = true
-      AND estado_propiedad = 'disponible'
-      AND ciudad IS NOT NULL
-      AND ciudad != ''
-    GROUP BY ciudad
-    HAVING COUNT(*) > 0
+      AND category = 'ciudad'
+      AND count > 0
     ORDER BY count DESC
   `;
 
-  // Sectores con conteos
+  // Sectores desde stats_cache
   const sectors = await sql`
     SELECT
-      sector as name,
-      LOWER(REPLACE(REPLACE(sector, ' ', '-'), '.', '')) as slug,
-      ciudad as parent_name,
-      LOWER(REPLACE(REPLACE(ciudad, ' ', '-'), '.', '')) as parent_slug,
-      COUNT(*) as count,
-      COUNT(*) FILTER (WHERE operacion = 'venta') as count_venta,
-      COUNT(*) FILTER (WHERE operacion = 'alquiler') as count_alquiler
-    FROM propiedades
+      slug,
+      display_name as name,
+      count,
+      count_venta,
+      count_alquiler,
+      parent_slug
+    FROM stats_cache
     WHERE tenant_id = ${tenantId}
-      AND activo = true
-      AND estado_propiedad = 'disponible'
-      AND sector IS NOT NULL
-      AND sector != ''
-    GROUP BY sector, ciudad
-    HAVING COUNT(*) > 0
+      AND category = 'sector'
+      AND count > 0
     ORDER BY count DESC
   `;
 
-  return { cities, sectors };
+  // Provincias desde stats_cache
+  const provinces = await sql`
+    SELECT
+      slug,
+      display_name as name,
+      count,
+      count_venta,
+      count_alquiler,
+      parent_slug
+    FROM stats_cache
+    WHERE tenant_id = ${tenantId}
+      AND category = 'provincia'
+      AND count > 0
+    ORDER BY count DESC
+  `;
+
+  return { cities, sectors, provinces };
 }
 
 /**
@@ -1165,6 +1173,7 @@ export async function getFeaturedPropertiesByType(
 
 /**
  * Obtiene propiedades destacadas por ubicación (ciudad o sector)
+ * Usa el display_name de stats_cache para hacer match exacto con la tabla propiedades
  */
 export async function getFeaturedPropertiesByLocation(
   tenantId: string,
@@ -1174,8 +1183,40 @@ export async function getFeaturedPropertiesByLocation(
 ) {
   const sql = getSQL();
 
+  // Primero obtenemos el display_name real de stats_cache usando el slug
+  const locationInfo = await sql`
+    SELECT display_name
+    FROM stats_cache
+    WHERE tenant_id = ${tenantId}
+      AND category = ${locationType}
+      AND slug = ${locationSlug}
+    LIMIT 1
+  ` as any[];
+
+  // Si no encontramos la ubicación en stats_cache, intentar buscar por nombre normalizado
+  const locationName = locationInfo[0]?.display_name;
+
   // Usar queries separados según el tipo de ubicación
   if (locationType === 'sector') {
+    if (locationName) {
+      return sql`
+        SELECT
+          p.id, p.titulo, p.slug, p.tipo, p.operacion, p.precio, p.precio_venta, p.precio_alquiler,
+          p.moneda, p.habitaciones, p.banos, p.estacionamientos, p.m2_construccion, p.m2_terreno,
+          p.imagen_principal, p.imagenes, p.codigo_publico, p.sector, p.ciudad, p.provincia,
+          p.destacada, p.is_project
+        FROM propiedades p
+        WHERE p.tenant_id = ${tenantId}
+          AND p.sector = ${locationName}
+          AND p.activo = true
+          AND p.estado_propiedad = 'disponible'
+          AND p.imagen_principal IS NOT NULL
+          AND p.imagen_principal != ''
+        ORDER BY p.destacada DESC, p.created_at DESC
+        LIMIT ${limit}
+      `;
+    }
+    // Fallback: buscar por slug normalizado
     return sql`
       SELECT
         p.id, p.titulo, p.slug, p.tipo, p.operacion, p.precio, p.precio_venta, p.precio_alquiler,
@@ -1184,7 +1225,7 @@ export async function getFeaturedPropertiesByLocation(
         p.destacada, p.is_project
       FROM propiedades p
       WHERE p.tenant_id = ${tenantId}
-        AND LOWER(REPLACE(REPLACE(p.sector, ' ', '-'), '.', '')) = LOWER(${locationSlug})
+        AND LOWER(REPLACE(p.sector, ' ', '-')) = LOWER(${locationSlug})
         AND p.activo = true
         AND p.estado_propiedad = 'disponible'
         AND p.imagen_principal IS NOT NULL
@@ -1193,6 +1234,25 @@ export async function getFeaturedPropertiesByLocation(
       LIMIT ${limit}
     `;
   } else if (locationType === 'provincia') {
+    if (locationName) {
+      return sql`
+        SELECT
+          p.id, p.titulo, p.slug, p.tipo, p.operacion, p.precio, p.precio_venta, p.precio_alquiler,
+          p.moneda, p.habitaciones, p.banos, p.estacionamientos, p.m2_construccion, p.m2_terreno,
+          p.imagen_principal, p.imagenes, p.codigo_publico, p.sector, p.ciudad, p.provincia,
+          p.destacada, p.is_project
+        FROM propiedades p
+        WHERE p.tenant_id = ${tenantId}
+          AND p.provincia = ${locationName}
+          AND p.activo = true
+          AND p.estado_propiedad = 'disponible'
+          AND p.imagen_principal IS NOT NULL
+          AND p.imagen_principal != ''
+        ORDER BY p.destacada DESC, p.created_at DESC
+        LIMIT ${limit}
+      `;
+    }
+    // Fallback
     return sql`
       SELECT
         p.id, p.titulo, p.slug, p.tipo, p.operacion, p.precio, p.precio_venta, p.precio_alquiler,
@@ -1201,7 +1261,7 @@ export async function getFeaturedPropertiesByLocation(
         p.destacada, p.is_project
       FROM propiedades p
       WHERE p.tenant_id = ${tenantId}
-        AND LOWER(REPLACE(REPLACE(p.provincia, ' ', '-'), '.', '')) = LOWER(${locationSlug})
+        AND LOWER(REPLACE(p.provincia, ' ', '-')) = LOWER(${locationSlug})
         AND p.activo = true
         AND p.estado_propiedad = 'disponible'
         AND p.imagen_principal IS NOT NULL
@@ -1210,7 +1270,26 @@ export async function getFeaturedPropertiesByLocation(
       LIMIT ${limit}
     `;
   } else {
-    // ciudad (default) - comparar con ciudad normalizada (sin puntos ni espacios)
+    // ciudad (default)
+    if (locationName) {
+      return sql`
+        SELECT
+          p.id, p.titulo, p.slug, p.tipo, p.operacion, p.precio, p.precio_venta, p.precio_alquiler,
+          p.moneda, p.habitaciones, p.banos, p.estacionamientos, p.m2_construccion, p.m2_terreno,
+          p.imagen_principal, p.imagenes, p.codigo_publico, p.sector, p.ciudad, p.provincia,
+          p.destacada, p.is_project
+        FROM propiedades p
+        WHERE p.tenant_id = ${tenantId}
+          AND p.ciudad = ${locationName}
+          AND p.activo = true
+          AND p.estado_propiedad = 'disponible'
+          AND p.imagen_principal IS NOT NULL
+          AND p.imagen_principal != ''
+        ORDER BY p.destacada DESC, p.created_at DESC
+        LIMIT ${limit}
+      `;
+    }
+    // Fallback: buscar por slug normalizado
     return sql`
       SELECT
         p.id, p.titulo, p.slug, p.tipo, p.operacion, p.precio, p.precio_venta, p.precio_alquiler,
