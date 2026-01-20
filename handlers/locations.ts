@@ -302,21 +302,33 @@ export async function handleLocations({
   try {
     const tenantId = tenant.id;
 
-    // Obtener estadísticas de ubicaciones directamente desde propiedades
-    let locationStats;
-    try {
-      locationStats = await db.getLocationStats(tenantId);
-      console.log('[Locations] Stats obtenidos:', {
-        provincias: locationStats.provincias?.length || 0,
-        ciudades: locationStats.ciudades?.length || 0,
-        sectores: locationStats.sectores?.length || 0
-      });
-    } catch (statsError) {
-      console.error('[Locations] Error obteniendo stats:', statsError);
-      locationStats = { provincias: [], ciudades: [], sectores: [] };
-    }
+    // Usar getPopularLocations que sabemos que funciona
+    const popularLocations = await db.getPopularLocations(tenantId);
+    console.log('[Locations] Popular locations:', {
+      cities: popularLocations.cities?.length || 0,
+      sectors: popularLocations.sectors?.length || 0
+    });
 
-  const { provincias, ciudades, sectores } = locationStats;
+    // Adaptar formato al esperado por el handler
+    const ciudades = (popularLocations.cities || []).map((c: any) => ({
+      name: c.name,
+      slug: c.slug,
+      count: parseInt(c.count, 10) || 0,
+      count_venta: 0, // No disponible en getPopularLocations
+      count_alquiler: 0,
+      parent_slug: null
+    }));
+
+    const sectores = (popularLocations.sectors || []).map((s: any) => ({
+      name: s.name,
+      slug: s.slug,
+      count: parseInt(s.count, 10) || 0,
+      count_venta: 0,
+      count_alquiler: 0,
+      parent_slug: s.city ? s.city.toLowerCase().replace(/ /g, '-') : null
+    }));
+
+    const provincias: any[] = []; // Por ahora vacío
 
   if ((!ciudades || ciudades.length === 0) && (!sectores || sectores.length === 0)) {
     console.log('[Locations] No hay datos de ubicaciones, retornando fallback');
