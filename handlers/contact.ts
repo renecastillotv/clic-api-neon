@@ -45,7 +45,7 @@ async function getActiveAdvisors(tenantId: string, limit: number = 6): Promise<A
       INNER JOIN usuarios u ON u.id = pa.usuario_id
       WHERE pa.tenant_id = ${tenantId}
         AND pa.activo = true
-        AND u.active = true
+        AND u.activo = true
       ORDER BY pa.orden_listado ASC NULLS LAST, pa.created_at ASC
       LIMIT ${limit}
     `;
