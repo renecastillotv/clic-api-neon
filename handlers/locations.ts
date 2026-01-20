@@ -303,16 +303,25 @@ export async function handleLocations({
     const tenantId = tenant.id;
 
     // Usar getPopularLocations que sabemos que funciona
-    console.log('[Locations] Llamando getPopularLocations con tenantId:', tenantId);
-    const popularLocations = await db.getPopularLocations(tenantId);
-    console.log('[Locations] Resultado getPopularLocations:', JSON.stringify(popularLocations).substring(0, 500));
+    let popularLocations: any = { cities: [], sectors: [] };
+    try {
+      console.log('[Locations] Llamando getPopularLocations con tenantId:', tenantId);
+      popularLocations = await db.getPopularLocations(tenantId);
+      console.log('[Locations] Resultado:', {
+        citiesCount: popularLocations?.cities?.length,
+        sectorsCount: popularLocations?.sectors?.length,
+        firstCity: popularLocations?.cities?.[0]
+      });
+    } catch (dbError: any) {
+      console.error('[Locations] ERROR en getPopularLocations:', dbError?.message || dbError);
+    }
 
     // Adaptar formato al esperado por el handler
     const ciudades = (popularLocations.cities || []).map((c: any) => ({
       name: c.name,
       slug: c.slug,
       count: parseInt(c.count, 10) || 0,
-      count_venta: 0, // No disponible en getPopularLocations
+      count_venta: 0,
       count_alquiler: 0,
       parent_slug: null
     }));
@@ -326,7 +335,7 @@ export async function handleLocations({
       parent_slug: s.city ? s.city.toLowerCase().replace(/ /g, '-') : null
     }));
 
-    const provincias: any[] = []; // Por ahora vacío
+    const provincias: any[] = [];
 
   if ((!ciudades || ciudades.length === 0) && (!sectores || sectores.length === 0)) {
     console.log('[Locations] No hay datos de ubicaciones, retornando fallback');
