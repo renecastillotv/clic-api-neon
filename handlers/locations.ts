@@ -302,52 +302,11 @@ export async function handleLocations({
   try {
     const tenantId = tenant.id;
 
-    // Consultar directamente desde la base de datos (replicando getPopularLocations inline)
-    const sql = db.getSQL();
-
-    const cities = await sql`
-      SELECT
-        ciudad as name,
-        LOWER(REPLACE(ciudad, ' ', '-')) as slug,
-        COUNT(*) as count
-      FROM propiedades
-      WHERE tenant_id = ${tenantId}
-        AND activo = true
-        AND estado_propiedad = 'disponible'
-        AND ciudad IS NOT NULL
-        AND ciudad != ''
-      GROUP BY ciudad
-      HAVING COUNT(*) >= 1
-      ORDER BY count DESC
-      LIMIT 8
-    `;
-
-    const sectors = await sql`
-      SELECT
-        sector as name,
-        LOWER(REPLACE(sector, ' ', '-')) as slug,
-        ciudad as city,
-        COUNT(*) as count
-      FROM propiedades
-      WHERE tenant_id = ${tenantId}
-        AND activo = true
-        AND estado_propiedad = 'disponible'
-        AND sector IS NOT NULL
-        AND sector != ''
-      GROUP BY sector, ciudad
-      HAVING COUNT(*) >= 1
-      ORDER BY count DESC
-      LIMIT 8
-    `;
-
-    // Cast explícito a arrays
-    const citiesArray = cities as any[];
-    const sectorsArray = sectors as any[];
-
-    console.log('[Locations] Query directa - cities:', citiesArray?.length, 'sectors:', sectorsArray?.length);
+    // TEST: Usar getPopularLocations que sabemos que funciona en properties handler
+    const popularLocations = await db.getPopularLocations(tenantId);
 
     // Adaptar formato al esperado por el handler
-    const ciudades = (citiesArray || []).map((c: any) => ({
+    const ciudades = (popularLocations.cities || []).map((c: any) => ({
       name: c.name,
       slug: c.slug,
       count: parseInt(c.count, 10) || 0,
@@ -356,7 +315,7 @@ export async function handleLocations({
       parent_slug: null
     }));
 
-    const sectores = (sectorsArray || []).map((s: any) => ({
+    const sectores = (popularLocations.sectors || []).map((s: any) => ({
       name: s.name,
       slug: s.slug,
       count: parseInt(s.count, 10) || 0,
