@@ -1228,7 +1228,7 @@ export async function getFeaturedPropertiesByLocation(
       LIMIT ${limit}
     `;
   } else {
-    // ciudad (default) - usar ciudad_slug o comparar con ciudad normalizada
+    // ciudad (default) - comparar con ciudad normalizada (sin usar ciudad_slug que puede no existir)
     return sql`
       SELECT
         p.id, p.titulo, p.slug, p.tipo, p.operacion, p.precio, p.precio_venta, p.precio_alquiler,
@@ -1237,7 +1237,7 @@ export async function getFeaturedPropertiesByLocation(
         p.destacada, p.is_project
       FROM propiedades p
       WHERE p.tenant_id = ${tenantId}
-        AND (p.ciudad_slug = ${locationSlug} OR LOWER(REPLACE(REPLACE(p.ciudad, ' ', '-'), '.', '')) = LOWER(${locationSlug}))
+        AND LOWER(REPLACE(p.ciudad, ' ', '-')) = LOWER(${locationSlug})
         AND p.activo = true
         AND p.estado_propiedad = 'disponible'
         AND p.imagen_principal IS NOT NULL
