@@ -309,8 +309,14 @@ export async function handleLocations({
     console.log('[Locations] Step 1: Getting location stats for tenant:', tenantId, 'lang:', lang);
 
     // Usar getLocationStats (equivalente a getPropertyTypeStats pero para ubicaciones)
-    const locationStats = await db.getLocationStats(tenantId);
-    console.log('[Locations] Step 2: Got stats, cities:', locationStats?.cities?.length, 'sectors:', locationStats?.sectors?.length);
+    let locationStats;
+    try {
+      locationStats = await db.getLocationStats(tenantId);
+      console.log('[Locations] Step 2: Got stats, cities:', locationStats?.cities?.length, 'sectors:', locationStats?.sectors?.length);
+    } catch (dbError: any) {
+      console.error('[Locations] DB Error in getLocationStats:', dbError?.message);
+      throw new Error(`DB Error: ${dbError?.message}`);
+    }
 
     // Adaptar formato - los datos ya vienen con count_venta y count_alquiler
     const ciudades = (locationStats.cities || []).map((c: any) => ({
