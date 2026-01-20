@@ -1115,10 +1115,12 @@ export async function getFeaturedPropertiesByType(
 
 /**
  * Obtiene estadísticas de ubicaciones (provincias, ciudades, sectores)
+ * Con fallback a consulta directa si stats_cache está vacío
  */
 export async function getLocationStats(tenantId: string) {
   const sql = getSQL();
 
+  // Primero intentar desde stats_cache
   const [provincias, ciudades, sectores] = await Promise.all([
     sql`
       SELECT slug, display_name as name, count, count_venta, count_alquiler
@@ -1143,7 +1145,82 @@ export async function getLocationStats(tenantId: string) {
     `
   ]);
 
-  return { provincias, ciudades, sectores };
+  // Si stats_cache tiene datos, retornar directamente
+  const ciudadesArr = ciudades as any[];
+  const sectoresArr = sectores as any[];
+  const provinciasArr = provincias as any[];
+
+  if (ciudadesArr.length > 0 || sectoresArr.length > 0) {
+    return { provincias: provinciasArr, ciudades: ciudadesArr, sectores: sectoresArr };
+  }
+
+  // Fallback: consultar directamente desde propiedades
+  console.log('[DB] stats_cache vacío para ubicaciones, usando fallback directo');
+
+  const [provinciasDirecto, ciudadesDirecto, sectoresDirecto] = await Promise.all([
+    // Provincias desde propiedades
+    sql`
+      SELECT
+        LOWER(REPLACE(REPLACE(TRIM(provincia), ' ', '-'), '.', '')) as slug,
+        TRIM(provincia) as name,
+        COUNT(*)::int as count,
+        COUNT(*) FILTER (WHERE operacion = 'venta')::int as count_venta,
+        COUNT(*) FILTER (WHERE operacion = 'alquiler')::int as count_alquiler
+      FROM propiedades
+      WHERE tenant_id = ${tenantId}
+        AND activo = true
+        AND estado_propiedad = 'disponible'
+        AND provincia IS NOT NULL
+        AND TRIM(provincia) != ''
+      GROUP BY TRIM(provincia)
+      ORDER BY COUNT(*) DESC
+      LIMIT 20
+    `,
+    // Ciudades desde propiedades
+    sql`
+      SELECT
+        LOWER(REPLACE(REPLACE(TRIM(ciudad), ' ', '-'), '.', '')) as slug,
+        TRIM(ciudad) as name,
+        COUNT(*)::int as count,
+        COUNT(*) FILTER (WHERE operacion = 'venta')::int as count_venta,
+        COUNT(*) FILTER (WHERE operacion = 'alquiler')::int as count_alquiler,
+        LOWER(REPLACE(REPLACE(TRIM(MIN(provincia)), ' ', '-'), '.', '')) as parent_slug
+      FROM propiedades
+      WHERE tenant_id = ${tenantId}
+        AND activo = true
+        AND estado_propiedad = 'disponible'
+        AND ciudad IS NOT NULL
+        AND TRIM(ciudad) != ''
+      GROUP BY TRIM(ciudad)
+      ORDER BY COUNT(*) DESC
+      LIMIT 30
+    `,
+    // Sectores desde propiedades
+    sql`
+      SELECT
+        LOWER(REPLACE(REPLACE(TRIM(sector), ' ', '-'), '.', '')) as slug,
+        TRIM(sector) as name,
+        COUNT(*)::int as count,
+        COUNT(*) FILTER (WHERE operacion = 'venta')::int as count_venta,
+        COUNT(*) FILTER (WHERE operacion = 'alquiler')::int as count_alquiler,
+        LOWER(REPLACE(REPLACE(TRIM(MIN(ciudad)), ' ', '-'), '.', '')) as parent_slug
+      FROM propiedades
+      WHERE tenant_id = ${tenantId}
+        AND activo = true
+        AND estado_propiedad = 'disponible'
+        AND sector IS NOT NULL
+        AND TRIM(sector) != ''
+      GROUP BY TRIM(sector)
+      ORDER BY COUNT(*) DESC
+      LIMIT 50
+    `
+  ]);
+
+  return {
+    provincias: provinciasDirecto,
+    ciudades: ciudadesDirecto,
+    sectores: sectoresDirecto
+  };
 }
 
 /**
