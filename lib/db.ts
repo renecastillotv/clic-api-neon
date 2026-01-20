@@ -1068,6 +1068,56 @@ export async function getPropertyTypeStats(tenantId: string) {
 }
 
 /**
+ * Obtiene estadísticas de ciudades con conteos (equivalente a getPropertyTypeStats pero para ubicaciones)
+ * Consulta directamente la tabla propiedades ya que stats_cache no tiene datos de ubicaciones
+ */
+export async function getLocationStats(tenantId: string) {
+  const sql = getSQL();
+
+  // Ciudades con conteos
+  const cities = await sql`
+    SELECT
+      ciudad as name,
+      LOWER(REPLACE(REPLACE(ciudad, ' ', '-'), '.', '')) as slug,
+      COUNT(*) as count,
+      COUNT(*) FILTER (WHERE operacion = 'venta') as count_venta,
+      COUNT(*) FILTER (WHERE operacion = 'alquiler') as count_alquiler
+    FROM propiedades
+    WHERE tenant_id = ${tenantId}
+      AND activo = true
+      AND estado_propiedad = 'disponible'
+      AND ciudad IS NOT NULL
+      AND ciudad != ''
+    GROUP BY ciudad
+    HAVING COUNT(*) > 0
+    ORDER BY count DESC
+  `;
+
+  // Sectores con conteos
+  const sectors = await sql`
+    SELECT
+      sector as name,
+      LOWER(REPLACE(REPLACE(sector, ' ', '-'), '.', '')) as slug,
+      ciudad as parent_name,
+      LOWER(REPLACE(REPLACE(ciudad, ' ', '-'), '.', '')) as parent_slug,
+      COUNT(*) as count,
+      COUNT(*) FILTER (WHERE operacion = 'venta') as count_venta,
+      COUNT(*) FILTER (WHERE operacion = 'alquiler') as count_alquiler
+    FROM propiedades
+    WHERE tenant_id = ${tenantId}
+      AND activo = true
+      AND estado_propiedad = 'disponible'
+      AND sector IS NOT NULL
+      AND sector != ''
+    GROUP BY sector, ciudad
+    HAVING COUNT(*) > 0
+    ORDER BY count DESC
+  `;
+
+  return { cities, sectors };
+}
+
+/**
  * Obtiene propiedades destacadas de un tipo específico
  */
 export async function getFeaturedPropertiesByType(
@@ -1114,74 +1164,6 @@ export async function getFeaturedPropertiesByType(
 }
 
 /**
- * Obtiene estadísticas de ubicaciones (provincias, ciudades, sectores)
- * Usa el mismo estilo de query que getPopularLocations (que funciona)
- */
-export async function getLocationStats(tenantId: string) {
-  const sql = getSQL();
-
-  // Ciudades - usando EXACTAMENTE el mismo estilo que getPopularLocations
-  const ciudades = await sql`
-    SELECT
-      ciudad as name,
-      LOWER(REPLACE(ciudad, ' ', '-')) as slug,
-      COUNT(*) as count
-    FROM propiedades
-    WHERE tenant_id = ${tenantId}
-      AND activo = true
-      AND estado_propiedad = 'disponible'
-      AND ciudad IS NOT NULL
-      AND ciudad != ''
-    GROUP BY ciudad
-    HAVING COUNT(*) >= 1
-    ORDER BY count DESC
-    LIMIT 30
-  `;
-
-  // Sectores
-  const sectores = await sql`
-    SELECT
-      sector as name,
-      LOWER(REPLACE(sector, ' ', '-')) as slug,
-      COUNT(*) as count
-    FROM propiedades
-    WHERE tenant_id = ${tenantId}
-      AND activo = true
-      AND estado_propiedad = 'disponible'
-      AND sector IS NOT NULL
-      AND sector != ''
-    GROUP BY sector
-    HAVING COUNT(*) >= 1
-    ORDER BY count DESC
-    LIMIT 50
-  `;
-
-  // Provincias
-  const provincias = await sql`
-    SELECT
-      provincia as name,
-      LOWER(REPLACE(provincia, ' ', '-')) as slug,
-      COUNT(*) as count
-    FROM propiedades
-    WHERE tenant_id = ${tenantId}
-      AND activo = true
-      AND estado_propiedad = 'disponible'
-      AND provincia IS NOT NULL
-      AND provincia != ''
-    GROUP BY provincia
-    HAVING COUNT(*) >= 1
-    ORDER BY count DESC
-    LIMIT 20
-  `;
-
-  return {
-    provincias: provincias as any[],
-    ciudades: ciudades as any[],
-    sectores: sectores as any[]
-  };
-}
-
-/**
  * Obtiene propiedades destacadas por ubicación (ciudad o sector)
  */
 export async function getFeaturedPropertiesByLocation(
@@ -1202,7 +1184,7 @@ export async function getFeaturedPropertiesByLocation(
         p.destacada, p.is_project
       FROM propiedades p
       WHERE p.tenant_id = ${tenantId}
-        AND p.sector_slug = ${locationSlug}
+        AND LOWER(REPLACE(REPLACE(p.sector, ' ', '-'), '.', '')) = LOWER(${locationSlug})
         AND p.activo = true
         AND p.estado_propiedad = 'disponible'
         AND p.imagen_principal IS NOT NULL
@@ -1219,7 +1201,7 @@ export async function getFeaturedPropertiesByLocation(
         p.destacada, p.is_project
       FROM propiedades p
       WHERE p.tenant_id = ${tenantId}
-        AND p.provincia_slug = ${locationSlug}
+        AND LOWER(REPLACE(REPLACE(p.provincia, ' ', '-'), '.', '')) = LOWER(${locationSlug})
         AND p.activo = true
         AND p.estado_propiedad = 'disponible'
         AND p.imagen_principal IS NOT NULL
@@ -1228,7 +1210,7 @@ export async function getFeaturedPropertiesByLocation(
       LIMIT ${limit}
     `;
   } else {
-    // ciudad (default) - comparar con ciudad normalizada (sin usar ciudad_slug que puede no existir)
+    // ciudad (default) - comparar con ciudad normalizada (sin puntos ni espacios)
     return sql`
       SELECT
         p.id, p.titulo, p.slug, p.tipo, p.operacion, p.precio, p.precio_venta, p.precio_alquiler,
@@ -1237,7 +1219,7 @@ export async function getFeaturedPropertiesByLocation(
         p.destacada, p.is_project
       FROM propiedades p
       WHERE p.tenant_id = ${tenantId}
-        AND LOWER(REPLACE(p.ciudad, ' ', '-')) = LOWER(${locationSlug})
+        AND LOWER(REPLACE(REPLACE(p.ciudad, ' ', '-'), '.', '')) = LOWER(${locationSlug})
         AND p.activo = true
         AND p.estado_propiedad = 'disponible'
         AND p.imagen_principal IS NOT NULL

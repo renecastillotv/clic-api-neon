@@ -302,26 +302,26 @@ export async function handleLocations({
   try {
     const tenantId = tenant.id;
 
-    // Usar getPopularLocations que funciona en properties handler
-    const popularLocations = await db.getPopularLocations(tenantId);
+    // Usar getLocationStats (equivalente a getPropertyTypeStats pero para ubicaciones)
+    const locationStats = await db.getLocationStats(tenantId);
 
-    // Adaptar formato
-    const ciudades = (popularLocations.cities || []).map((c: any) => ({
+    // Adaptar formato - los datos ya vienen con count_venta y count_alquiler
+    const ciudades = (locationStats.cities || []).map((c: any) => ({
       name: c.name,
       slug: c.slug,
       count: parseInt(c.count, 10) || 0,
-      count_venta: 0,
-      count_alquiler: 0,
+      count_venta: parseInt(c.count_venta, 10) || 0,
+      count_alquiler: parseInt(c.count_alquiler, 10) || 0,
       parent_slug: null
     }));
 
-    const sectores = (popularLocations.sectors || []).map((s: any) => ({
+    const sectores = (locationStats.sectors || []).map((s: any) => ({
       name: s.name,
       slug: s.slug,
       count: parseInt(s.count, 10) || 0,
-      count_venta: 0,
-      count_alquiler: 0,
-      parent_slug: s.city ? s.city.toLowerCase().replace(/ /g, '-') : null
+      count_venta: parseInt(s.count_venta, 10) || 0,
+      count_alquiler: parseInt(s.count_alquiler, 10) || 0,
+      parent_slug: s.parent_slug || null
     }));
 
     const provincias: any[] = [];
