@@ -340,11 +340,14 @@ export async function handleLocations({
       LIMIT 8
     `;
 
-    const popularLocations = { cities, sectors };
-    console.log('[Locations] Query directa - cities:', cities?.length, 'sectors:', sectors?.length);
+    // Cast explícito a arrays
+    const citiesArray = cities as any[];
+    const sectorsArray = sectors as any[];
+
+    console.log('[Locations] Query directa - cities:', citiesArray?.length, 'sectors:', sectorsArray?.length);
 
     // Adaptar formato al esperado por el handler
-    const ciudades = (popularLocations.cities || []).map((c: any) => ({
+    const ciudades = (citiesArray || []).map((c: any) => ({
       name: c.name,
       slug: c.slug,
       count: parseInt(c.count, 10) || 0,
@@ -353,7 +356,7 @@ export async function handleLocations({
       parent_slug: null
     }));
 
-    const sectores = (popularLocations.sectors || []).map((s: any) => ({
+    const sectores = (sectorsArray || []).map((s: any) => ({
       name: s.name,
       slug: s.slug,
       count: parseInt(s.count, 10) || 0,
