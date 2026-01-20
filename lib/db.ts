@@ -1460,8 +1460,23 @@ export async function getFilterAmenities(tenantId: string, limit: number = 15) {
 }
 
 /**
+ * Genera un ID numérico determinístico a partir de un string (slug)
+ * Usa un hash simple para generar IDs consistentes
+ */
+function slugToId(slug: string): number {
+  let hash = 0;
+  for (let i = 0; i < slug.length; i++) {
+    const char = slug.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash; // Convert to 32bit integer
+  }
+  return Math.abs(hash);
+}
+
+/**
  * Obtiene todas las opciones para los filtros de búsqueda
  * Incluye tipos de propiedad, ubicaciones y amenidades
+ * Los sectores incluyen parent_ids para filtrar según la ubicación seleccionada
  */
 export async function getFilterOptions(tenantId: string) {
   const sql = getSQL();
@@ -1511,35 +1526,87 @@ export async function getFilterOptions(tenantId: string) {
     getFilterAmenities(tenantId, 15)
   ]);
 
+  // Crear mapas de slug -> id para provincias y ciudades
+  const provinciaIdMap = new Map<string, number>();
+  const ciudadIdMap = new Map<string, number>();
+  const ciudadParentMap = new Map<string, string>(); // ciudad slug -> provincia slug
+
+  // Procesar provincias con IDs determinísticos
+  const provinciasData = (provincias as any[]).map(p => {
+    const id = slugToId(p.slug);
+    provinciaIdMap.set(p.slug, id);
+    return {
+      id,
+      slug: p.slug,
+      display_name: p.display_name,
+      count: parseInt(p.count, 10)
+    };
+  });
+
+  // Procesar ciudades con IDs determinísticos y parent_ids
+  const ciudadesData = (ciudades as any[]).map(c => {
+    const id = slugToId(c.slug);
+    ciudadIdMap.set(c.slug, id);
+    if (c.parent_slug) {
+      ciudadParentMap.set(c.slug, c.parent_slug);
+    }
+
+    // parent_ids incluye el ID de la provincia padre si existe
+    const parent_ids: number[] = [];
+    if (c.parent_slug && provinciaIdMap.has(c.parent_slug)) {
+      parent_ids.push(provinciaIdMap.get(c.parent_slug)!);
+    }
+
+    return {
+      id,
+      slug: c.slug,
+      display_name: c.display_name,
+      count: parseInt(c.count, 10),
+      parent_slug: c.parent_slug,
+      parent_ids
+    };
+  });
+
+  // Procesar sectores con IDs determinísticos y parent_ids
+  const sectoresData = (sectores as any[]).map(s => {
+    const id = slugToId(s.slug);
+
+    // parent_ids incluye el ID de la ciudad padre y la provincia padre
+    const parent_ids: number[] = [];
+    if (s.parent_slug) {
+      // Agregar ID de la ciudad padre
+      if (ciudadIdMap.has(s.parent_slug)) {
+        parent_ids.push(ciudadIdMap.get(s.parent_slug)!);
+      }
+      // También agregar ID de la provincia (abuela)
+      const provinciaSlug = ciudadParentMap.get(s.parent_slug);
+      if (provinciaSlug && provinciaIdMap.has(provinciaSlug)) {
+        parent_ids.push(provinciaIdMap.get(provinciaSlug)!);
+      }
+    }
+
+    return {
+      id,
+      slug: s.slug,
+      display_name: s.display_name,
+      count: parseInt(s.count, 10),
+      parent_slug: s.parent_slug,
+      parent_ids
+    };
+  });
+
   return {
-    tipo: (tipos as any[]).map((t, i) => ({
-      id: i + 1,
+    tipo: (tipos as any[]).map(t => ({
+      id: slugToId(t.slug),
       slug: t.slug,
       display_name: t.display_name,
       count: parseInt(t.count, 10)
     })),
-    provincia: (provincias as any[]).map((p, i) => ({
-      id: i + 1,
-      slug: p.slug,
-      display_name: p.display_name,
-      count: parseInt(p.count, 10)
-    })),
-    ciudad: (ciudades as any[]).map((c, i) => ({
-      id: i + 1,
-      slug: c.slug,
-      display_name: c.display_name,
-      count: parseInt(c.count, 10),
-      parent_slug: c.parent_slug
-    })),
-    sector: (sectores as any[]).map((s, i) => ({
-      id: i + 1,
-      slug: s.slug,
-      display_name: s.display_name,
-      count: parseInt(s.count, 10),
-      parent_slug: s.parent_slug
-    })),
-    amenity: (amenidades as any[]).map((a, i) => ({
-      id: i + 1,
+    provincia: provinciasData,
+    ciudad: ciudadesData,
+    sector: sectoresData,
+    amenity: (amenidades as any[]).map(a => ({
+      id: slugToId(a.slug || a.display_name?.toLowerCase().replace(/\s+/g, '-') || 'amenity'),
       slug: a.slug || a.display_name?.toLowerCase().replace(/\s+/g, '-'),
       display_name: a.display_name,
       icon: a.icon,
