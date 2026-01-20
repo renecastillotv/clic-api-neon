@@ -329,21 +329,22 @@ export async function handleSell(options: {
     topAgentsResult = await sql`
       SELECT
         v.perfil_asesor_id,
-        pa.nombre,
-        pa.apellido,
-        pa.foto as avatar,
-        pa.cargo as position,
+        u.nombre,
+        u.apellido,
+        COALESCE(pa.foto_url, u.avatar_url) as avatar,
+        pa.titulo_profesional as position,
         pa.slug,
         COUNT(*) as total_ventas,
         COALESCE(SUM(v.valor_cierre), 0) as volumen_total
       FROM ventas v
       INNER JOIN perfiles_asesor pa ON v.perfil_asesor_id = pa.id
+      INNER JOIN usuarios u ON pa.usuario_id = u.id
       WHERE v.tenant_id = ${tenant.id}
         AND v.activo = true
         AND v.cancelada = false
         AND v.completada = true
         AND v.perfil_asesor_id IS NOT NULL
-      GROUP BY v.perfil_asesor_id, pa.nombre, pa.apellido, pa.foto, pa.cargo, pa.slug
+      GROUP BY v.perfil_asesor_id, u.nombre, u.apellido, pa.foto_url, u.avatar_url, pa.titulo_profesional, pa.slug
       ORDER BY total_ventas DESC, volumen_total DESC
       LIMIT 4
     ` as any[];

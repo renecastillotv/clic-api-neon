@@ -46,7 +46,7 @@ async function getActiveAdvisors(tenantId: string, limit: number = 6): Promise<A
       WHERE pa.tenant_id = ${tenantId}
         AND pa.activo = true
         AND u.activo = true
-      ORDER BY pa.orden_listado ASC NULLS LAST, pa.created_at ASC
+      ORDER BY pa.orden ASC NULLS LAST, pa.created_at ASC
       LIMIT ${limit}
     `;
 
