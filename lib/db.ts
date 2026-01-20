@@ -1146,6 +1146,73 @@ export async function getLocationStats(tenantId: string) {
   return { provincias, ciudades, sectores };
 }
 
+/**
+ * Obtiene propiedades destacadas por ubicación (ciudad o sector)
+ */
+export async function getFeaturedPropertiesByLocation(
+  tenantId: string,
+  locationSlug: string,
+  locationType: 'ciudad' | 'sector' | 'provincia' = 'ciudad',
+  limit: number = 6
+) {
+  const sql = getSQL();
+
+  // Usar queries separados según el tipo de ubicación
+  if (locationType === 'sector') {
+    return sql`
+      SELECT
+        p.id, p.titulo, p.slug, p.tipo, p.operacion, p.precio, p.precio_venta, p.precio_alquiler,
+        p.moneda, p.habitaciones, p.banos, p.estacionamientos, p.m2_construccion, p.m2_terreno,
+        p.imagen_principal, p.imagenes, p.codigo_publico, p.sector, p.ciudad, p.provincia,
+        p.destacada, p.is_project
+      FROM propiedades p
+      WHERE p.tenant_id = ${tenantId}
+        AND p.sector_slug = ${locationSlug}
+        AND p.activo = true
+        AND p.estado_propiedad = 'disponible'
+        AND p.imagen_principal IS NOT NULL
+        AND p.imagen_principal != ''
+      ORDER BY p.destacada DESC, p.created_at DESC
+      LIMIT ${limit}
+    `;
+  } else if (locationType === 'provincia') {
+    return sql`
+      SELECT
+        p.id, p.titulo, p.slug, p.tipo, p.operacion, p.precio, p.precio_venta, p.precio_alquiler,
+        p.moneda, p.habitaciones, p.banos, p.estacionamientos, p.m2_construccion, p.m2_terreno,
+        p.imagen_principal, p.imagenes, p.codigo_publico, p.sector, p.ciudad, p.provincia,
+        p.destacada, p.is_project
+      FROM propiedades p
+      WHERE p.tenant_id = ${tenantId}
+        AND p.provincia_slug = ${locationSlug}
+        AND p.activo = true
+        AND p.estado_propiedad = 'disponible'
+        AND p.imagen_principal IS NOT NULL
+        AND p.imagen_principal != ''
+      ORDER BY p.destacada DESC, p.created_at DESC
+      LIMIT ${limit}
+    `;
+  } else {
+    // ciudad (default)
+    return sql`
+      SELECT
+        p.id, p.titulo, p.slug, p.tipo, p.operacion, p.precio, p.precio_venta, p.precio_alquiler,
+        p.moneda, p.habitaciones, p.banos, p.estacionamientos, p.m2_construccion, p.m2_terreno,
+        p.imagen_principal, p.imagenes, p.codigo_publico, p.sector, p.ciudad, p.provincia,
+        p.destacada, p.is_project
+      FROM propiedades p
+      WHERE p.tenant_id = ${tenantId}
+        AND p.ciudad_slug = ${locationSlug}
+        AND p.activo = true
+        AND p.estado_propiedad = 'disponible'
+        AND p.imagen_principal IS NOT NULL
+        AND p.imagen_principal != ''
+      ORDER BY p.destacada DESC, p.created_at DESC
+      LIMIT ${limit}
+    `;
+  }
+}
+
 export default {
   getSQL,
   query,
@@ -1182,5 +1249,6 @@ export default {
   getStatsByCategory,
   getPropertyTypeStats,
   getFeaturedPropertiesByType,
-  getLocationStats
+  getLocationStats,
+  getFeaturedPropertiesByLocation
 };

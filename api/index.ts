@@ -17,6 +17,7 @@ import favoritesHandler from '../handlers/favorites';
 import proposalsHandler from '../handlers/proposals';
 import contactHandler from '../handlers/contact';
 import propertyTypesHandler from '../handlers/propertyTypes';
+import locationsHandler from '../handlers/locations';
 
 import type { TenantConfig, ApiResponse, Error404Response } from '../types';
 
@@ -430,19 +431,12 @@ export default async function handler(request: Request): Promise<Response> {
         break;
 
       case 'locations':
-        // TODO: Implementar handler de ubicaciones
-        response = {
-          type: 'locations-main',
-          language,
+        response = await locationsHandler.handleLocations({
           tenant,
-          seo: utils.generateSEO({
-            title: 'Ubicaciones',
-            description: 'Explora propiedades por ubicación',
-            language,
-            canonicalUrl: pathname,
-          }),
+          language,
+          pathname,
           trackingString,
-        } as any;
+        }) as any;
         break;
 
       case 'property-types':
