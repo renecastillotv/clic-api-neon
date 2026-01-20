@@ -1158,68 +1158,68 @@ export async function getLocationStats(tenantId: string) {
     console.log('[DB] stats_cache no disponible o vacío, usando fallback:', err);
   }
 
-  // Fallback: consultar directamente desde propiedades
+  // Fallback: consultar directamente desde propiedades (usando estilo de getPopularLocations que funciona)
   console.log('[DB] Consultando ubicaciones directamente desde propiedades');
 
   try {
-    const [provinciasDirecto, ciudadesDirecto, sectoresDirecto] = await Promise.all([
-      // Provincias desde propiedades
-      sql`
-        SELECT
-          LOWER(REPLACE(REPLACE(TRIM(provincia), ' ', '-'), '.', '')) as slug,
-          TRIM(provincia) as name,
-          COUNT(*)::int as count,
-          COUNT(*) FILTER (WHERE operacion = 'venta')::int as count_venta,
-          COUNT(*) FILTER (WHERE operacion = 'alquiler')::int as count_alquiler
-        FROM propiedades
-        WHERE tenant_id = ${tenantId}
-          AND activo = true
-          AND estado_propiedad = 'disponible'
-          AND provincia IS NOT NULL
-          AND TRIM(provincia) != ''
-        GROUP BY TRIM(provincia)
-        ORDER BY COUNT(*) DESC
-        LIMIT 20
-      `,
-      // Ciudades desde propiedades
-      sql`
-        SELECT
-          LOWER(REPLACE(REPLACE(TRIM(ciudad), ' ', '-'), '.', '')) as slug,
-          TRIM(ciudad) as name,
-          COUNT(*)::int as count,
-          COUNT(*) FILTER (WHERE operacion = 'venta')::int as count_venta,
-          COUNT(*) FILTER (WHERE operacion = 'alquiler')::int as count_alquiler,
-          LOWER(REPLACE(REPLACE(TRIM(MIN(provincia)), ' ', '-'), '.', '')) as parent_slug
-        FROM propiedades
-        WHERE tenant_id = ${tenantId}
-          AND activo = true
-          AND estado_propiedad = 'disponible'
-          AND ciudad IS NOT NULL
-          AND TRIM(ciudad) != ''
-        GROUP BY TRIM(ciudad)
-        ORDER BY COUNT(*) DESC
-        LIMIT 30
-      `,
-      // Sectores desde propiedades
-      sql`
-        SELECT
-          LOWER(REPLACE(REPLACE(TRIM(sector), ' ', '-'), '.', '')) as slug,
-          TRIM(sector) as name,
-          COUNT(*)::int as count,
-          COUNT(*) FILTER (WHERE operacion = 'venta')::int as count_venta,
-          COUNT(*) FILTER (WHERE operacion = 'alquiler')::int as count_alquiler,
-          LOWER(REPLACE(REPLACE(TRIM(MIN(ciudad)), ' ', '-'), '.', '')) as parent_slug
-        FROM propiedades
-        WHERE tenant_id = ${tenantId}
-          AND activo = true
-          AND estado_propiedad = 'disponible'
-          AND sector IS NOT NULL
-          AND TRIM(sector) != ''
-        GROUP BY TRIM(sector)
-        ORDER BY COUNT(*) DESC
-        LIMIT 50
-      `
-    ]);
+    // Ciudades - usando query similar a getPopularLocations que funciona
+    const ciudadesDirecto = await sql`
+      SELECT
+        ciudad as name,
+        LOWER(REPLACE(ciudad, ' ', '-')) as slug,
+        COUNT(*) as count,
+        COUNT(*) FILTER (WHERE operacion = 'venta') as count_venta,
+        COUNT(*) FILTER (WHERE operacion = 'alquiler') as count_alquiler,
+        LOWER(REPLACE(MIN(provincia), ' ', '-')) as parent_slug
+      FROM propiedades
+      WHERE tenant_id = ${tenantId}
+        AND activo = true
+        AND estado_propiedad = 'disponible'
+        AND ciudad IS NOT NULL
+        AND ciudad != ''
+      GROUP BY ciudad
+      ORDER BY count DESC
+      LIMIT 30
+    `;
+
+    // Sectores
+    const sectoresDirecto = await sql`
+      SELECT
+        sector as name,
+        LOWER(REPLACE(sector, ' ', '-')) as slug,
+        COUNT(*) as count,
+        COUNT(*) FILTER (WHERE operacion = 'venta') as count_venta,
+        COUNT(*) FILTER (WHERE operacion = 'alquiler') as count_alquiler,
+        LOWER(REPLACE(MIN(ciudad), ' ', '-')) as parent_slug
+      FROM propiedades
+      WHERE tenant_id = ${tenantId}
+        AND activo = true
+        AND estado_propiedad = 'disponible'
+        AND sector IS NOT NULL
+        AND sector != ''
+      GROUP BY sector
+      ORDER BY count DESC
+      LIMIT 50
+    `;
+
+    // Provincias
+    const provinciasDirecto = await sql`
+      SELECT
+        provincia as name,
+        LOWER(REPLACE(provincia, ' ', '-')) as slug,
+        COUNT(*) as count,
+        COUNT(*) FILTER (WHERE operacion = 'venta') as count_venta,
+        COUNT(*) FILTER (WHERE operacion = 'alquiler') as count_alquiler
+      FROM propiedades
+      WHERE tenant_id = ${tenantId}
+        AND activo = true
+        AND estado_propiedad = 'disponible'
+        AND provincia IS NOT NULL
+        AND provincia != ''
+      GROUP BY provincia
+      ORDER BY count DESC
+      LIMIT 20
+    `;
 
     console.log('[DB] Datos ubicaciones fallback:', {
       provincias: (provinciasDirecto as any[]).length,
