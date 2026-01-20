@@ -299,10 +299,11 @@ export async function handleLocations({
   pathname,
   trackingString
 }: LocationsHandlerParams) {
-  const tenantId = tenant.id;
+  try {
+    const tenantId = tenant.id;
 
-  // Obtener estadísticas de ubicaciones desde stats_cache
-  const locationStats = await db.getLocationStats(tenantId);
+    // Obtener estadísticas de ubicaciones desde stats_cache
+    const locationStats = await db.getLocationStats(tenantId);
 
   const { provincias, ciudades, sectores } = locationStats;
 
@@ -529,6 +530,44 @@ export async function handleLocations({
     },
     trackingString,
   };
+  } catch (error) {
+    console.error('[Locations Handler] Error:', error);
+    // Devolver respuesta de fallback en caso de error
+    return {
+      type: 'locations-main',
+      pageType: 'locations-main',
+      language,
+      tenant,
+      locations: {
+        provinces: [],
+        cities: [],
+        sectors: [],
+        enrichedCities: []
+      },
+      stats: {
+        totalCities: 0,
+        totalSectors: 0,
+        totalProperties: 0
+      },
+      featuredByLocation: {},
+      seoContent: SEO_CONTENT[language] || SEO_CONTENT.es,
+      seo: {
+        title: language === 'es' ? 'Ubicaciones | CLIC' :
+              language === 'en' ? 'Locations | CLIC' : 'Emplacements | CLIC',
+        description: language === 'es' ? 'Explora propiedades por ubicación en República Dominicana' :
+                    language === 'en' ? 'Explore properties by location in Dominican Republic' :
+                    'Explorez les propriétés par emplacement en République Dominicaine',
+        h1: language === 'es' ? 'Explora Ubicaciones' :
+            language === 'en' ? 'Explore Locations' : 'Explorer les Emplacements',
+        h2: language === 'es' ? 'Encuentra propiedades en las mejores zonas' :
+            language === 'en' ? 'Find properties in the best areas' :
+            'Trouvez des propriétés dans les meilleures zones',
+        canonical_url: pathname,
+        breadcrumbs: [],
+      },
+      trackingString,
+    };
+  }
 }
 
 export default {
