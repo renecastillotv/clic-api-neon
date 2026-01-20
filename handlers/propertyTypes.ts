@@ -177,7 +177,7 @@ export async function handlePropertyTypes({
         sector: p.sector,
         city: p.ciudad,
         province: p.provincia,
-        featured: p.destacado,
+        featured: p.destacada,
         isProject: p.is_project,
         // Display strings
         title_display: p.titulo,

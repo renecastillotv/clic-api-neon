@@ -1096,14 +1096,14 @@ export async function getFeaturedPropertiesByType(
       p.sector,
       p.ciudad,
       p.provincia,
-      p.destacado,
+      p.destacada,
       p.is_project
     FROM propiedades p
     WHERE p.tenant_id = ${tenantId}
       AND LOWER(p.tipo) = LOWER(${propertyType})
       AND p.activo = true
       AND p.estado_propiedad = 'disponible'
-    ORDER BY p.destacado DESC, p.created_at DESC
+    ORDER BY p.destacada DESC, p.created_at DESC
     LIMIT ${limit}
   `;
   return result;
