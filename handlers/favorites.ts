@@ -546,9 +546,9 @@ export async function handleFavorites(request: Request): Promise<Response> {
 
       // Formatear propiedades para el frontend (nombres compatibles con FavoritesLayout)
       const formattedProperties = properties.map((prop: any) => {
-        // Formatear precio
+        // Formatear precio - normalizar moneda para evitar errores con valores inválidos
         const precio = prop.precio_venta || prop.precio_alquiler || prop.precio || 0;
-        const moneda = prop.moneda || 'USD';
+        const moneda = utils.normalizeCurrency(prop.moneda);
         const precioFormateado = precio > 0
           ? `${moneda === 'USD' ? 'US$' : 'RD$'}${precio.toLocaleString()}`
           : 'Precio a consultar';

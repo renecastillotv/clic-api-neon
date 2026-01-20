@@ -238,7 +238,8 @@ export async function handleSingleAdvisor(options: {
 function toPropertyCard(prop: any, language: string, trackingString: string): any {
   const price = prop.precio_venta || prop.precio_alquiler || prop.precio || 0;
   // Usar moneda única del schema (no hay moneda_venta/moneda_alquiler separadas)
-  const currency = prop.moneda || 'USD';
+  // Normalizar para evitar errores con valores inválidos (0, null, undefined, etc.)
+  const currency = utils.normalizeCurrency(prop.moneda);
   const operationType = prop.operacion || (prop.precio_venta ? 'sale' : 'rental');
   const propertyUrl = utils.buildPropertyUrl(prop, language, trackingString);
 

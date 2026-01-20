@@ -366,7 +366,7 @@ export async function handleSingleProperty(options: {
     const price = operationType === 'venta'
       ? (p.precio_venta || p.precio || 0)
       : (p.precio_alquiler || p.precio || 0);
-    const currency = p.moneda || 'USD';
+    const currency = utils.normalizeCurrency(p.moneda);
     const operationDisplay = language === 'en' ? (operationType === 'venta' ? 'Sale' : 'Rent') :
                              language === 'fr' ? (operationType === 'venta' ? 'Vente' : 'Location') :
                              (operationType === 'venta' ? 'Venta' : 'Alquiler');
@@ -652,7 +652,8 @@ function toSupabasePropertyFormat(prop: any, language: string, trackingString: s
   const furnishedRentalPrice = prop.precio_alquiler_amueblado ? parseFloat(prop.precio_alquiler_amueblado) : null;
 
   // Usar moneda única del schema (no hay moneda_venta/moneda_alquiler separadas)
-  const currency = prop.moneda || 'USD';
+  // Normalizar para evitar errores con valores inválidos (0, null, undefined, etc.)
+  const currency = utils.normalizeCurrency(prop.moneda);
   const operationType = salePrice ? 'venta' : 'alquiler';
   const displayPrice = salePrice || rentalPrice || tempRentalPrice || furnishedRentalPrice || 0;
 
@@ -1133,7 +1134,7 @@ function generateListSEO(filters: Record<string, any>, language: string, tenant:
 function generatePropertySEO(prop: any, language: string, tenant: TenantConfig): any {
   const title = prop.titulo || 'Propiedad';
   const location = [prop.sector, prop.ciudad].filter(Boolean).join(', ');
-  const currency = prop.moneda || 'USD';
+  const currency = utils.normalizeCurrency(prop.moneda);
   const price = utils.formatPrice(
     prop.precio_venta || prop.precio_alquiler || 0,
     currency,

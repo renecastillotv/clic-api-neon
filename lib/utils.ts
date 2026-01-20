@@ -139,15 +139,66 @@ export function processTranslations(
 
 const CURRENCY_FORMATTERS: Record<string, Record<string, Intl.NumberFormat>> = {};
 
+// Monedas válidas ISO 4217 que soportamos
+const VALID_CURRENCIES = new Set(['USD', 'DOP', 'EUR', 'MXN', 'COP', 'ARS', 'BRL', 'CLP', 'PEN', 'UYU']);
+
+/**
+ * Valida y normaliza un código de moneda
+ * Retorna 'USD' si el valor es inválido (null, undefined, 0, '', etc.)
+ */
+export function normalizeCurrency(currency: any): string {
+  // Si es falsy (null, undefined, 0, '', false, NaN)
+  if (!currency) return 'USD';
+
+  // Convertir a string y limpiar
+  const currencyStr = String(currency).toUpperCase().trim();
+
+  // Si está vacío después de limpiar o es un número inválido
+  if (!currencyStr || currencyStr === '0' || currencyStr === 'NULL' || currencyStr === 'UNDEFINED') {
+    return 'USD';
+  }
+
+  // Verificar si es una moneda válida conocida
+  if (VALID_CURRENCIES.has(currencyStr)) {
+    return currencyStr;
+  }
+
+  // Si tiene 3 caracteres alfabéticos, asumimos que es un código de moneda válido
+  if (/^[A-Z]{3}$/.test(currencyStr)) {
+    return currencyStr;
+  }
+
+  // Fallback a USD para cualquier otro caso
+  return 'USD';
+}
+
 function getCurrencyFormatter(currency: string, locale: string): Intl.NumberFormat {
-  const key = `${currency}-${locale}`;
+  // Normalizar moneda antes de crear el formatter
+  const safeCurrency = normalizeCurrency(currency);
+  const key = `${safeCurrency}-${locale}`;
+
   if (!CURRENCY_FORMATTERS[key]) {
-    CURRENCY_FORMATTERS[key] = new Intl.NumberFormat(locale, {
-      style: 'currency',
-      currency: currency,
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0
-    });
+    try {
+      CURRENCY_FORMATTERS[key] = new Intl.NumberFormat(locale, {
+        style: 'currency',
+        currency: safeCurrency,
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 0
+      });
+    } catch (error) {
+      // Si aún así falla, usar USD como último recurso
+      console.error(`[formatPrice] Error creating formatter for currency "${safeCurrency}":`, error);
+      const fallbackKey = `USD-${locale}`;
+      if (!CURRENCY_FORMATTERS[fallbackKey]) {
+        CURRENCY_FORMATTERS[fallbackKey] = new Intl.NumberFormat(locale, {
+          style: 'currency',
+          currency: 'USD',
+          minimumFractionDigits: 0,
+          maximumFractionDigits: 0
+        });
+      }
+      return CURRENCY_FORMATTERS[fallbackKey];
+    }
   }
   return CURRENCY_FORMATTERS[key];
 }
@@ -176,24 +227,36 @@ export function formatPrice(
     fr: 'fr-FR'
   };
 
-  const formatter = getCurrencyFormatter(currency, locales[language] || 'es-DO');
-  const formatted = formatter.format(amount);
+  // Normalizar moneda antes de formatear
+  const safeCurrency = normalizeCurrency(currency);
 
-  if (type !== 'sale') {
-    const suffixes: Record<string, Record<string, string>> = {
-      rental: { es: '/mes', en: '/mo', fr: '/mois' },
-      temp_rental: { es: '/día', en: '/day', fr: '/jour' },
-      furnished_rental: { es: '/mes', en: '/mo', fr: '/mois' }
-    };
-    return `${formatted}${suffixes[type][language] || suffixes[type].es}`;
+  try {
+    const formatter = getCurrencyFormatter(safeCurrency, locales[language] || 'es-DO');
+    const formatted = formatter.format(amount);
+
+    if (type !== 'sale') {
+      const suffixes: Record<string, Record<string, string>> = {
+        rental: { es: '/mes', en: '/mo', fr: '/mois' },
+        temp_rental: { es: '/día', en: '/day', fr: '/jour' },
+        furnished_rental: { es: '/mes', en: '/mo', fr: '/mois' }
+      };
+      return `${formatted}${suffixes[type]?.[language] || suffixes[type]?.es || '/mes'}`;
+    }
+
+    return formatted;
+  } catch (error) {
+    // Último fallback: formato manual simple
+    console.error(`[formatPrice] Error formatting price:`, error);
+    const symbol = safeCurrency === 'DOP' ? 'RD$' : '$';
+    const formattedAmount = amount.toLocaleString('en-US');
+    return `${symbol}${formattedAmount}`;
   }
-
-  return formatted;
 }
 
 export function buildPriceDisplay(property: Record<string, any>, language: string): PropertyPrice {
   // Usar moneda única del schema (no hay moneda_venta/moneda_alquiler separadas)
-  const currency = property.moneda || 'USD';
+  // Normalizar para evitar errores con valores inválidos (0, null, undefined, etc.)
+  const currency = normalizeCurrency(property.moneda);
 
   // Prioridad: venta > alquiler > alquiler temporal > amueblado
   if (property.precio_venta && property.precio_venta > 0) {
@@ -969,6 +1032,7 @@ export default {
   processTranslations,
   formatPrice,
   buildPriceDisplay,
+  normalizeCurrency,
   processImages,
   buildUrl,
   buildPropertyUrl,

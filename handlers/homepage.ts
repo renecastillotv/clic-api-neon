@@ -195,7 +195,8 @@ function toSupabasePropertyFormat(prop: any, language: string, trackingString: s
   const salePrice = prop.precio_venta ? parseFloat(prop.precio_venta) : null;
   const rentalPrice = prop.precio_alquiler ? parseFloat(prop.precio_alquiler) : null;
   // Usar moneda única del schema (no hay moneda_venta/moneda_alquiler separadas)
-  const currency = prop.moneda || 'USD';
+  // Normalizar para evitar errores con valores inválidos (0, null, undefined, etc.)
+  const currency = utils.normalizeCurrency(prop.moneda);
   const operationType = salePrice ? 'venta' : 'alquiler';
   const displayPrice = salePrice || rentalPrice || 0;
 

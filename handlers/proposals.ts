@@ -2,6 +2,7 @@
 // Handler para sistema de propuestas públicas
 
 import { getSQL } from '../lib/db';
+import utils from '../lib/utils';
 
 // ============================================================================
 // TIPOS
@@ -390,7 +391,8 @@ async function deleteComment(commentId: string): Promise<boolean> {
 // Formatear propiedad para el frontend
 function formatProperty(prop: PropertyDetails): any {
   const precio = prop.precio_especial || prop.precio_venta || prop.precio_alquiler || prop.precio || 0;
-  const moneda = prop.moneda || 'USD';
+  // Normalizar moneda para evitar errores con valores inválidos (0, null, undefined, etc.)
+  const moneda = utils.normalizeCurrency(prop.moneda);
   const precioFormateado = precio > 0
     ? `${moneda === 'USD' ? 'US$' : 'RD$'}${precio.toLocaleString()}`
     : 'Precio a consultar';
