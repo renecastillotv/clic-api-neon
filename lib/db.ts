@@ -1089,7 +1089,7 @@ export async function getFeaturedPropertiesByType(
       p.moneda,
       p.habitaciones,
       p.banos,
-      p.parqueos,
+      p.estacionamientos,
       p.m2_construccion,
       p.m2_terreno,
       p.imagen_principal,

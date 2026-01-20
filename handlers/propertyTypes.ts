@@ -170,7 +170,7 @@ export async function handlePropertyTypes({
         currency: p.moneda || 'USD',
         bedrooms: p.habitaciones,
         bathrooms: p.banos,
-        parking: p.parqueos,
+        parking: p.estacionamientos,
         area: p.m2_construccion || p.m2_terreno,
         mainImage: p.imagen_principal,
         location: [p.sector, p.ciudad].filter(Boolean).join(', '),
