@@ -337,7 +337,7 @@ export async function handleSell(options: {
         COUNT(*) as total_ventas,
         COALESCE(SUM(v.valor_cierre), 0) as volumen_total
       FROM ventas v
-      INNER JOIN perfiles_asesores pa ON v.perfil_asesor_id = pa.id
+      INNER JOIN perfiles_asesor pa ON v.perfil_asesor_id = pa.id
       WHERE v.tenant_id = ${tenant.id}
         AND v.activo = true
         AND v.cancelada = false
