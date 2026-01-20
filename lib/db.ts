@@ -1094,7 +1094,7 @@ export async function getFeaturedPropertiesByType(
       p.m2_terreno,
       p.imagen_principal,
       p.imagenes,
-      p.codigo,
+      p.codigo_publico,
       p.sector,
       p.ciudad,
       p.provincia,

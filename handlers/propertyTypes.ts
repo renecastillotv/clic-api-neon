@@ -489,7 +489,7 @@ export async function handlePropertyTypes({
         metros_terreno: p.m2_terreno || 0,
         parqueos: p.estacionamientos || 0,
         tipo: p.tipo || '',
-        code: p.codigo || '',
+        code: p.codigo_publico || '',
         destacado: p.destacada || false,
         is_project: p.is_project || false,
       };
