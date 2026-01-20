@@ -181,7 +181,7 @@ export async function handlePropertyTypes({
         isProject: p.is_project,
         // Display strings
         title_display: p.titulo,
-        price_display: utils.formatPrice(price, p.moneda || 'USD', language),
+        price_display: utils.formatPrice(price, p.moneda || 'USD', operationType, language),
         location_display: [p.sector, p.ciudad].filter(Boolean).join(', '),
       };
     });
