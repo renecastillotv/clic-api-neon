@@ -301,9 +301,12 @@ export async function handleLocations({
   pathname,
   trackingString
 }: LocationsHandlerParams) {
+  // Definir lang al principio para evitar errores de undefined
+  const lang = language || 'es';
+
   try {
     const tenantId = tenant.id;
-    console.log('[Locations] Step 1: Getting location stats for tenant:', tenantId);
+    console.log('[Locations] Step 1: Getting location stats for tenant:', tenantId, 'lang:', lang);
 
     // Usar getLocationStats (equivalente a getPropertyTypeStats pero para ubicaciones)
     const locationStats = await db.getLocationStats(tenantId);
@@ -335,7 +338,7 @@ export async function handleLocations({
     // Fallback si no hay datos
     return {
       type: 'locations-main',
-      language,
+      language: lang,
       tenant,
       locations: {
         provinces: [],
@@ -349,22 +352,21 @@ export async function handleLocations({
         totalProperties: 0
       },
       featuredByLocation: {},
-      seoContent: SEO_CONTENT[language] || SEO_CONTENT.es,
+      seoContent: SEO_CONTENT[lang] || SEO_CONTENT.es,
       seo: utils.generateSEO({
-        title: language === 'es' ? 'Ubicaciones' :
-               language === 'en' ? 'Locations' : 'Emplacements',
-        description: language === 'es' ? 'Explora propiedades por ubicación' :
-                     language === 'en' ? 'Explore properties by location' :
+        title: lang === 'es' ? 'Ubicaciones' :
+               lang === 'en' ? 'Locations' : 'Emplacements',
+        description: lang === 'es' ? 'Explora propiedades por ubicación' :
+                     lang === 'en' ? 'Explore properties by location' :
                      'Explorez les propriétés par emplacement',
-        language,
+        language: lang,
         canonicalUrl: pathname,
       }),
       trackingString,
     };
   }
 
-  console.log('[Locations] Step 3: Enriching cities, language:', language);
-  const lang = language || 'es';
+  console.log('[Locations] Step 3: Enriching cities, lang:', lang);
 
   // Enriquecer las ciudades con imágenes, iconos y descripciones
   const enrichedCities = (ciudades || []).map((city: any) => {
@@ -573,7 +575,7 @@ export async function handleLocations({
     return {
       type: 'locations-main',
       pageType: 'locations-main',
-      language,
+      language: lang,
       tenant,
       locations: {
         provinces: [],
@@ -587,18 +589,18 @@ export async function handleLocations({
         totalProperties: 0
       },
       featuredByLocation: {},
-      seoContent: SEO_CONTENT[language] || SEO_CONTENT.es,
+      seoContent: SEO_CONTENT[lang] || SEO_CONTENT.es,
       _debug_error: errorMessage, // Temporalmente para ver el error
       seo: {
-        title: language === 'es' ? 'Ubicaciones | CLIC' :
-              language === 'en' ? 'Locations | CLIC' : 'Emplacements | CLIC',
-        description: language === 'es' ? 'Explora propiedades por ubicación en República Dominicana' :
-                    language === 'en' ? 'Explore properties by location in Dominican Republic' :
+        title: lang === 'es' ? 'Ubicaciones | CLIC' :
+              lang === 'en' ? 'Locations | CLIC' : 'Emplacements | CLIC',
+        description: lang === 'es' ? 'Explora propiedades por ubicación en República Dominicana' :
+                    lang === 'en' ? 'Explore properties by location in Dominican Republic' :
                     'Explorez les propriétés par emplacement en République Dominicaine',
-        h1: language === 'es' ? 'Explora Ubicaciones' :
-            language === 'en' ? 'Explore Locations' : 'Explorer les Emplacements',
-        h2: language === 'es' ? 'Encuentra propiedades en las mejores zonas' :
-            language === 'en' ? 'Find properties in the best areas' :
+        h1: lang === 'es' ? 'Explora Ubicaciones' :
+            lang === 'en' ? 'Explore Locations' : 'Explorer les Emplacements',
+        h2: lang === 'es' ? 'Encuentra propiedades en las mejores zonas' :
+            lang === 'en' ? 'Find properties in the best areas' :
             'Trouvez des propriétés dans les meilleures zones',
         canonical_url: pathname,
         breadcrumbs: [],
