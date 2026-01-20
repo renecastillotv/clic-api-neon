@@ -420,7 +420,11 @@ export async function handleLocations({
 
     // Formatear propiedades para el carousel
     const formattedProperties = (properties || []).map((p: any) => {
-      const operationType = p.operacion || 'venta';
+      // Normalizar operationType a valores válidos para formatPrice
+      let operationType = p.operacion || 'venta';
+      if (operationType !== 'venta' && operationType !== 'alquiler') {
+        operationType = 'venta'; // fallback seguro
+      }
       const price = operationType === 'venta'
         ? (p.precio_venta || p.precio || 0)
         : (p.precio_alquiler || p.precio || 0);
@@ -443,7 +447,7 @@ export async function handleLocations({
         slug: p.slug,
         url: `/${p.slug}`,
         titulo: p.titulo || '',
-        precio: utils.formatPrice(price, p.moneda || 'USD', operationType, language),
+        precio: utils.formatPrice(price, p.moneda || 'USD', operationType, lang),
         imagen: p.imagen_principal || '',
         imagenes: imagenes.length > 0 ? imagenes : (p.imagen_principal ? [p.imagen_principal] : []),
         sector: [p.sector, p.ciudad].filter(Boolean).join(', '),
