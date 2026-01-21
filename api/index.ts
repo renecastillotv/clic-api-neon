@@ -510,6 +510,7 @@ async function getTenantConfig(domain: string): Promise<TenantConfig | null> {
     slug: tenantData.slug,
     name: tenantData.nombre || infoNegocio.nombre_comercial || config.company_name || 'Inmobiliaria',
     domain: tenantData.dominio_personalizado || domain,
+    asesor_default_id: tenantData.asesor_default_id || null,
 
     branding: {
       logo_url: config.logo_url || infoNegocio.logo_url,

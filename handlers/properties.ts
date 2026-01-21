@@ -24,6 +24,95 @@ function formatVideoDuration(seconds: number | null | undefined): string {
   return `${mins}:${secs.toString().padStart(2, '0')}`;
 }
 
+// Extraer código de referido del trackingString (ref=CODIGO)
+function extractRefCode(trackingString: string): string | null {
+  if (!trackingString) return null;
+  const match = trackingString.match(/[?&]ref=([^&]+)/i);
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
+// Formatear datos de asesor a estructura del frontend
+function formatAdvisorData(advisor: any, source: string = 'captador'): any {
+  if (!advisor) return null;
+
+  const socialNetworks = advisor.redes_sociales || {};
+
+  return {
+    id: advisor.usuario_id,
+    user_id: advisor.usuario_id,
+    profile_id: advisor.perfil_id || null,
+    name: `${advisor.nombre || ''} ${advisor.apellido || ''}`.trim() || 'Asesor',
+    first_name: advisor.nombre || '',
+    last_name: advisor.apellido || '',
+    phone: advisor.telefono_directo || advisor.telefono || '',
+    whatsapp: advisor.whatsapp || advisor.telefono || '',
+    email: advisor.email || '',
+    position: advisor.titulo_profesional || 'Asesor Inmobiliario',
+    profile_photo_url: advisor.foto_url || advisor.avatar_url || '',
+    image: advisor.foto_url || advisor.avatar_url || '',
+    rating: 4.9,
+    external_id: advisor.usuario_id,
+    code: advisor.codigo || advisor.usuario_id,
+    years_experience: advisor.experiencia_anos || 0,
+    specialty_description: Array.isArray(advisor.especialidades) && advisor.especialidades.length > 0
+      ? advisor.especialidades[0]
+      : '',
+    specialties: advisor.especialidades || [],
+    languages: advisor.idiomas || ['Español'],
+    biography: advisor.biografia || '',
+    slug: advisor.slug || '',
+    url: advisor.slug ? `/asesores/${advisor.slug}` : null,
+    facebook_url: socialNetworks.facebook || null,
+    instagram_url: socialNetworks.instagram || null,
+    linkedin_url: socialNetworks.linkedin || null,
+    twitter_url: socialNetworks.twitter || null,
+    youtube_url: socialNetworks.youtube || null,
+    whatsapp_url: advisor.whatsapp ? `https://wa.me/${advisor.whatsapp.replace(/[^\d]/g, '')}` : null,
+    social: socialNetworks,
+    active: true,
+    show_on_website: true,
+    source // 'ref', 'captador', 'cocaptador', 'default', 'company'
+  };
+}
+
+// Crear fallback de empresa cuando no hay asesor disponible
+function createCompanyFallback(tenant: TenantConfig): any {
+  return {
+    id: 'company-fallback',
+    user_id: null,
+    profile_id: null,
+    name: 'Equipo de Asistencia',
+    first_name: 'Equipo de',
+    last_name: 'Asistencia',
+    phone: tenant.contact?.phone || '',
+    whatsapp: tenant.contact?.whatsapp || tenant.contact?.phone || '',
+    email: tenant.contact?.email || '',
+    position: 'Atención al Cliente',
+    profile_photo_url: tenant.branding?.logo_url || '',
+    image: tenant.branding?.logo_url || '',
+    rating: 5.0,
+    external_id: 'company',
+    code: 'CLIC',
+    years_experience: 0,
+    specialty_description: '',
+    specialties: [],
+    languages: ['Español', 'Inglés'],
+    biography: '',
+    slug: '',
+    url: '/contacto',
+    facebook_url: tenant.social?.facebook || null,
+    instagram_url: tenant.social?.instagram || null,
+    linkedin_url: tenant.social?.linkedin || null,
+    twitter_url: tenant.social?.twitter || null,
+    youtube_url: tenant.social?.youtube || null,
+    whatsapp_url: tenant.contact?.whatsapp ? `https://wa.me/${tenant.contact.whatsapp.replace(/[^\d]/g, '')}` : null,
+    social: tenant.social || {},
+    active: true,
+    show_on_website: true,
+    source: 'company'
+  };
+}
+
 // ============================================================================
 // TIPOS COMPATIBLES CON SUPABASE
 // ============================================================================
@@ -306,15 +395,19 @@ export async function handleSingleProperty(options: {
   const captadorId = rawProperty.captador_id || rawProperty.captador_usuario_id;
   console.log('[handleSingleProperty] captadorId for agent properties:', captadorId);
 
-  const [similarPropertiesRaw, agentProperties, faqsRaw, testimonialsRaw, recentArticles, recentVideos, amenityDetails, cocaptadoresData] = await Promise.all([
+  // Extraer código de referido del tracking string (ref=CODIGO)
+  const refCode = extractRefCode(trackingString);
+  console.log('[handleSingleProperty] Ref code from tracking:', refCode);
+
+  const [similarPropertiesRaw, faqsRaw, testimonialsRaw, recentArticles, recentVideos, amenityDetails, cocaptadoresData, refAdvisor] = await Promise.all([
     db.getSimilarProperties(tenant.id, rawProperty.id, 4),
-    getAgentProperties(tenant.id, captadorId, rawProperty.id, language, trackingString),
     db.getFAQs({ tenantId: tenant.id, limit: 6 }),
     db.getTestimonials(tenant.id, 4),
     db.getRecentArticles(tenant.id, 4),
     db.getRecentVideos(tenant.id, 4),
     amenityNames.length > 0 ? db.getAmenityDetails(tenant.id, amenityNames) : Promise.resolve([]),
-    cocaptadoresIds.length > 0 ? db.getCocaptadoresData(tenant.id, cocaptadoresIds) : Promise.resolve([])
+    cocaptadoresIds.length > 0 ? db.getCocaptadoresData(tenant.id, cocaptadoresIds) : Promise.resolve([]),
+    refCode ? db.getAdvisorByCode(tenant.id, refCode) : Promise.resolve(null)
   ]);
 
   // Type assertions para los resultados de Neon
@@ -434,76 +527,126 @@ export async function handleSingleProperty(options: {
 
   console.log('[handleSingleProperty] Videos found:', formattedVideos.length);
 
-  // Extraer redes sociales del JSONB
-  const socialNetworks = rawProperty.agente_redes_sociales || {};
+  // ============================================================================
+  // SISTEMA DE FALLBACK PARA ASESOR
+  // Prioridad: ref code > captador activo > cocaptador activo > tenant default > empresa
+  // ============================================================================
 
-  // Construir objeto agente MAIN (captador principal)
-  // Estructura esperada por el frontend: agent.main
-  const agentMain = captadorId ? {
-    id: captadorId,
-    user_id: rawProperty.captador_usuario_id || captadorId,
-    profile_id: rawProperty.perfil_asesor_id || null,
-    name: `${rawProperty.agente_nombre || ''} ${rawProperty.agente_apellido || ''}`.trim() || 'Asesor',
-    first_name: rawProperty.agente_nombre || '',
-    last_name: rawProperty.agente_apellido || '',
-    phone: rawProperty.agente_telefono_directo || rawProperty.agente_telefono || '',
-    whatsapp: rawProperty.agente_whatsapp || rawProperty.agente_telefono || '',
-    email: rawProperty.agente_email || '',
-    position: rawProperty.agente_titulo || 'Asesor Inmobiliario',
-    profile_photo_url: rawProperty.agente_foto_url || rawProperty.agente_avatar || '',
-    image: rawProperty.agente_foto_url || rawProperty.agente_avatar || '',
-    rating: 4.9,
-    external_id: captadorId,
-    code: captadorId,
-    years_experience: rawProperty.agente_experiencia_anos || 0,
-    // specialty_description: usar primera especialidad si existe
-    specialty_description: Array.isArray(rawProperty.agente_especialidades) && rawProperty.agente_especialidades.length > 0
-      ? rawProperty.agente_especialidades[0]
-      : '',
-    specialties: rawProperty.agente_especialidades || [],
-    languages: rawProperty.agente_idiomas || ['Español'],
-    biography: rawProperty.agente_biografia || '',
-    slug: rawProperty.agente_slug || '',
-    url: rawProperty.agente_slug ? `/asesores/${rawProperty.agente_slug}` : null,
-    // Redes sociales individuales para el frontend
-    facebook_url: socialNetworks.facebook || null,
-    instagram_url: socialNetworks.instagram || null,
-    linkedin_url: socialNetworks.linkedin || null,
-    twitter_url: socialNetworks.twitter || null,
-    youtube_url: socialNetworks.youtube || null,
-    whatsapp_url: rawProperty.agente_whatsapp ? `https://wa.me/${rawProperty.agente_whatsapp.replace(/[^\d]/g, '')}` : null,
-    social: socialNetworks,
-    active: true,
-    show_on_website: true
-  } : null;
+  let agentMain: any = null;
+  let agentSource = 'none';
+  let agentIdForProperties: string | null = null;
 
-  // Formatear cocaptadores - Estructura esperada por el frontend
+  // 1. Si hay ref code, usar ese asesor (sistema de referidos)
+  if (refAdvisor) {
+    console.log('[handleSingleProperty] Using REF advisor:', refAdvisor.codigo);
+    agentMain = formatAdvisorData(refAdvisor, 'ref');
+    agentSource = 'ref';
+    agentIdForProperties = refAdvisor.usuario_id;
+  }
+  // 2. Si no hay ref, verificar si el captador está activo
+  else if (captadorId && rawProperty.agente_nombre) {
+    // El captador viene del JOIN, verificar que tenga datos válidos
+    const socialNetworks = rawProperty.agente_redes_sociales || {};
+    agentMain = {
+      id: captadorId,
+      user_id: rawProperty.captador_usuario_id || captadorId,
+      profile_id: rawProperty.perfil_asesor_id || null,
+      name: `${rawProperty.agente_nombre || ''} ${rawProperty.agente_apellido || ''}`.trim() || 'Asesor',
+      first_name: rawProperty.agente_nombre || '',
+      last_name: rawProperty.agente_apellido || '',
+      phone: rawProperty.agente_telefono_directo || rawProperty.agente_telefono || '',
+      whatsapp: rawProperty.agente_whatsapp || rawProperty.agente_telefono || '',
+      email: rawProperty.agente_email || '',
+      position: rawProperty.agente_titulo || 'Asesor Inmobiliario',
+      profile_photo_url: rawProperty.agente_foto_url || rawProperty.agente_avatar || '',
+      image: rawProperty.agente_foto_url || rawProperty.agente_avatar || '',
+      rating: 4.9,
+      external_id: captadorId,
+      code: captadorId,
+      years_experience: rawProperty.agente_experiencia_anos || 0,
+      specialty_description: Array.isArray(rawProperty.agente_especialidades) && rawProperty.agente_especialidades.length > 0
+        ? rawProperty.agente_especialidades[0]
+        : '',
+      specialties: rawProperty.agente_especialidades || [],
+      languages: rawProperty.agente_idiomas || ['Español'],
+      biography: rawProperty.agente_biografia || '',
+      slug: rawProperty.agente_slug || '',
+      url: rawProperty.agente_slug ? `/asesores/${rawProperty.agente_slug}` : null,
+      facebook_url: socialNetworks.facebook || null,
+      instagram_url: socialNetworks.instagram || null,
+      linkedin_url: socialNetworks.linkedin || null,
+      twitter_url: socialNetworks.twitter || null,
+      youtube_url: socialNetworks.youtube || null,
+      whatsapp_url: rawProperty.agente_whatsapp ? `https://wa.me/${rawProperty.agente_whatsapp.replace(/[^\d]/g, '')}` : null,
+      social: socialNetworks,
+      active: true,
+      show_on_website: true,
+      source: 'captador'
+    };
+    agentSource = 'captador';
+    agentIdForProperties = captadorId;
+    console.log('[handleSingleProperty] Using CAPTADOR:', agentMain.name);
+  }
+
+  // 3. Si no hay captador activo, buscar cocaptador activo
   const cocaptadoresArray = cocaptadoresData as any[];
-  const formattedCocaptores = cocaptadoresArray.map((c: any, index: number) => ({
-    id: c.usuario_id,
-    profile_id: c.perfil_id || null,
-    first_name: c.nombre || '',
-    last_name: c.apellido || '',
-    full_name: `${c.nombre || ''} ${c.apellido || ''}`.trim() || 'Asesor',
-    name: `${c.nombre || ''} ${c.apellido || ''}`.trim() || 'Asesor',
-    phone: c.telefono_directo || c.telefono || '',
-    whatsapp: c.whatsapp || c.telefono || '',
-    email: c.email || '',
-    position: c.titulo_profesional || 'Asesor Inmobiliario',
-    position_display: c.titulo_profesional || 'Asesor Inmobiliario',
-    role: 'Cocaptador',
-    order_priority: index + 1,
-    profile_photo_url: c.foto_url || c.avatar_url || '',
-    image: c.foto_url || c.avatar_url || '',
-    years_experience: c.experiencia_anos || 0,
-    biography: c.biografia || '',
-    slug: c.slug || '',
-    url: c.slug ? `/asesores/${c.slug}` : null
-  }));
+  if (!agentMain && cocaptadoresArray.length > 0) {
+    const activeCocaptador = cocaptadoresArray[0]; // Ya vienen filtrados por activo
+    agentMain = formatAdvisorData(activeCocaptador, 'cocaptador');
+    agentSource = 'cocaptador';
+    agentIdForProperties = activeCocaptador.usuario_id;
+    console.log('[handleSingleProperty] Using COCAPTADOR as main:', agentMain?.name);
+  }
+
+  // 4. Si no hay cocaptador, usar asesor por defecto del tenant
+  if (!agentMain && (tenant as any).asesor_default_id) {
+    const defaultAdvisor = await db.getAdvisorByUserId(tenant.id, (tenant as any).asesor_default_id);
+    if (defaultAdvisor) {
+      agentMain = formatAdvisorData(defaultAdvisor, 'default');
+      agentSource = 'default';
+      agentIdForProperties = defaultAdvisor.usuario_id;
+      console.log('[handleSingleProperty] Using TENANT DEFAULT advisor:', agentMain?.name);
+    }
+  }
+
+  // 5. Último fallback: datos de la empresa
+  if (!agentMain) {
+    agentMain = createCompanyFallback(tenant);
+    agentSource = 'company';
+    agentIdForProperties = null;
+    console.log('[handleSingleProperty] Using COMPANY FALLBACK');
+  }
+
+  // Formatear cocaptadores (excluir el que se usó como main si aplica)
+  const formattedCocaptores = cocaptadoresArray
+    .filter((c: any) => agentSource !== 'cocaptador' || c.usuario_id !== agentMain?.id)
+    .map((c: any, index: number) => ({
+      id: c.usuario_id,
+      profile_id: c.perfil_id || null,
+      first_name: c.nombre || '',
+      last_name: c.apellido || '',
+      full_name: `${c.nombre || ''} ${c.apellido || ''}`.trim() || 'Asesor',
+      name: `${c.nombre || ''} ${c.apellido || ''}`.trim() || 'Asesor',
+      phone: c.telefono_directo || c.telefono || '',
+      whatsapp: c.whatsapp || c.telefono || '',
+      email: c.email || '',
+      position: c.titulo_profesional || 'Asesor Inmobiliario',
+      position_display: c.titulo_profesional || 'Asesor Inmobiliario',
+      role: 'Cocaptador',
+      order_priority: index + 1,
+      profile_photo_url: c.foto_url || c.avatar_url || '',
+      image: c.foto_url || c.avatar_url || '',
+      years_experience: c.experiencia_anos || 0,
+      biography: c.biografia || '',
+      slug: c.slug || '',
+      url: c.slug ? `/asesores/${c.slug}` : null
+    }));
+
+  // Obtener propiedades del agente (usa el ID determinado por el sistema de fallback)
+  const agentProperties = await getAgentProperties(tenant.id, agentIdForProperties, rawProperty.id, language, trackingString);
 
   // Formatear propiedades del agente para el carrusel
-  // El frontend espera campos con sufijo _display y otros campos específicos
-  const formattedAgentProperties = agentProperties.map(p => ({
+  const formattedAgentProperties = agentProperties.map((p: any) => ({
     id: p.id,
     title: p.name,
     title_display: p.name || 'Propiedad',
@@ -532,7 +675,7 @@ export async function handleSingleProperty(options: {
     main: agentMain,
     cocaptors: formattedCocaptores,
     cocaptors_count: formattedCocaptores.length,
-    source: 'captador',
+    source: agentSource,
     should_show_properties: formattedAgentProperties.length > 0,
     properties_count: formattedAgentProperties.length,
     // Propiedades del agente para el carrusel - estructura esperada por AgentPropertiesCarousel.astro

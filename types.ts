@@ -442,6 +442,7 @@ export interface TenantConfig {
   slug: string;
   name: string;
   domain: string;
+  asesor_default_id?: string | null; // UUID del asesor por defecto para fallback
   config?: Record<string, any>; // Para acceder a configuración JSONB
 
   // Configuración visual

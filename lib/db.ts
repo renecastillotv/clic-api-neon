@@ -332,6 +332,76 @@ export async function getCocaptadoresData(tenantId: string, cocaptadoresIds: str
   return result;
 }
 
+// Obtener asesor por código (para sistema de referidos ref=CODIGO)
+export async function getAdvisorByCode(tenantId: string, codigo: string) {
+  if (!codigo) return null;
+  const sql = getSQL();
+  const result = await sql`
+    SELECT
+      u.id as usuario_id,
+      u.nombre,
+      u.apellido,
+      u.email,
+      u.telefono,
+      u.avatar_url,
+      u.activo as usuario_activo,
+      pa.id as perfil_id,
+      pa.slug,
+      pa.foto_url,
+      pa.biografia,
+      pa.experiencia_anos,
+      pa.titulo_profesional,
+      pa.whatsapp,
+      pa.telefono_directo,
+      pa.especialidades,
+      pa.idiomas,
+      pa.redes_sociales,
+      pa.codigo
+    FROM perfiles_asesor pa
+    JOIN usuarios u ON pa.usuario_id = u.id
+    WHERE pa.tenant_id = ${tenantId}
+      AND pa.codigo = ${codigo.toUpperCase()}
+      AND pa.activo = true
+      AND u.activo = true
+    LIMIT 1
+  `;
+  return result[0] || null;
+}
+
+// Obtener asesor por ID de usuario (para tenant default advisor)
+export async function getAdvisorByUserId(tenantId: string, usuarioId: string) {
+  if (!usuarioId) return null;
+  const sql = getSQL();
+  const result = await sql`
+    SELECT
+      u.id as usuario_id,
+      u.nombre,
+      u.apellido,
+      u.email,
+      u.telefono,
+      u.avatar_url,
+      u.activo as usuario_activo,
+      pa.id as perfil_id,
+      pa.slug,
+      pa.foto_url,
+      pa.biografia,
+      pa.experiencia_anos,
+      pa.titulo_profesional,
+      pa.whatsapp,
+      pa.telefono_directo,
+      pa.especialidades,
+      pa.idiomas,
+      pa.redes_sociales,
+      pa.codigo
+    FROM usuarios u
+    LEFT JOIN perfiles_asesor pa ON pa.usuario_id = u.id AND pa.tenant_id = ${tenantId}
+    WHERE u.id = ${usuarioId}::uuid
+      AND u.activo = true
+    LIMIT 1
+  `;
+  return result[0] || null;
+}
+
 // Obtener agente/usuario por slug usando perfiles_asesor
 export async function getAdvisorBySlug(slug: string, tenantId: string) {
   const sql = getSQL();
@@ -1651,6 +1721,9 @@ export default {
   getSimilarProperties,
   getCocaptadoresData,
   getRecentVideos,
+  // Advisor lookup functions
+  getAdvisorByCode,
+  getAdvisorByUserId,
   // Stats cache
   getStatsByCategory,
   getPropertyTypeStats,
