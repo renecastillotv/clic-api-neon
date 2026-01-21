@@ -342,8 +342,30 @@ export async function getAdvisorByCode(tenantId: string, codigo: string) {
 
   console.log('[getAdvisorByCode] Searching for code:', normalizedCode, 'in tenant:', tenantId);
 
+  // Primero buscar sin filtro de visible_en_web para diagnóstico
+  const debugResult = await sql`
+    SELECT pa.codigo, pa.slug, pa.activo, pa.visible_en_web, u.activo as usuario_activo
+    FROM perfiles_asesor pa
+    JOIN usuarios u ON pa.usuario_id = u.id
+    WHERE pa.tenant_id = ${tenantId}
+      AND (LOWER(pa.codigo) = LOWER(${normalizedCode}) OR LOWER(pa.slug) = LOWER(${normalizedCode}))
+    LIMIT 1
+  `;
+  const debugInfo = (debugResult as any[])[0];
+  if (debugInfo) {
+    console.log('[getAdvisorByCode] Debug - Found advisor:', {
+      codigo: debugInfo.codigo,
+      slug: debugInfo.slug,
+      activo: debugInfo.activo,
+      visible_en_web: debugInfo.visible_en_web,
+      usuario_activo: debugInfo.usuario_activo
+    });
+  } else {
+    console.log('[getAdvisorByCode] Debug - No advisor found with code/slug:', normalizedCode);
+  }
+
   // Buscar por codigo O por slug (case insensitive)
-  // Requiere: activo=true, visible_en_web=true, usuario activo
+  // Requiere: activo=true, visible_en_web=true (o null), usuario activo
   const result = await sql`
     SELECT
       u.id as usuario_id,
@@ -373,13 +395,13 @@ export async function getAdvisorByCode(tenantId: string, codigo: string) {
         OR LOWER(pa.slug) = LOWER(${normalizedCode})
       )
       AND pa.activo = true
-      AND COALESCE(pa.visible_en_web, true) = true
+      AND (pa.visible_en_web IS NULL OR pa.visible_en_web = true)
       AND u.activo = true
     LIMIT 1
   `;
 
   const advisor = (result as any[])[0] || null;
-  console.log('[getAdvisorByCode] Result:', advisor ? `Found: ${advisor.nombre} ${advisor.apellido} (visible_en_web: true)` : 'Not found or not visible');
+  console.log('[getAdvisorByCode] Result:', advisor ? `Found: ${advisor.nombre} ${advisor.apellido}` : 'Not found or not qualified');
   return advisor;
 }
 
