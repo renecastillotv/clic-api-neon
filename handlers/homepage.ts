@@ -23,6 +23,7 @@ export async function handleHomepage(options: {
   const [
     featuredProperties,
     locationStats,
+    propertyTypeStats,
     quickStats,
     testimonials,
     advisors,
@@ -33,6 +34,7 @@ export async function handleHomepage(options: {
   ] = await Promise.all([
     db.getFeaturedProperties(tenant.id, 12),
     db.getLocationStats(tenant.id),  // Usar getLocationStats para datos enriquecidos con imágenes
+    db.getPropertyTypeStats(tenant.id),  // Estadísticas por tipo de propiedad
     db.getQuickStats(tenant.id),
     db.getTestimonials(tenant.id, 6),
     db.getAdvisors(tenant.id, 4),
@@ -58,6 +60,35 @@ export async function handleHomepage(options: {
   // Extraer videos y artículos reales de los handlers
   const realVideos = videosData?.recentVideos || videosData?.featuredVideos || [];
   const realArticles = (articlesData as any)?.recentArticles || (articlesData as any)?.featuredArticles || [];
+
+  // Obtener propiedades destacadas por tipo (top 3 tipos)
+  const topTypes = (propertyTypeStats as any[]).slice(0, 3);
+  const featuredByTypePromises = topTypes.map(async (typeData: any) => {
+    const typeProperties = await db.getFeaturedPropertiesByType(tenant.id, typeData.slug, 6);
+    return {
+      type: typeData.type,
+      slug: typeData.slug,
+      properties: (typeProperties as any[]).map(p => toSupabasePropertyFormat(p, language, trackingString))
+    };
+  });
+  const featuredByTypeResults = await Promise.all(featuredByTypePromises);
+
+  // Construir objeto featuredByType
+  const featuredByType: Record<string, any> = {};
+  featuredByTypeResults.forEach(({ type, slug, properties }) => {
+    if (properties.length > 0) {
+      featuredByType[type] = {
+        properties,
+        slug,
+        title: language === 'es' ? `${type} Destacados` :
+               language === 'en' ? `Featured ${type}` :
+               `${type} en Vedette`,
+        subtitle: language === 'es' ? `Explora las mejores opciones de ${type.toLowerCase()}` :
+                  language === 'en' ? `Explore the best ${type.toLowerCase()} options` :
+                  `Explorez les meilleures options de ${type.toLowerCase()}`
+      };
+    }
+  });
 
   // Construir sections
   const sections = buildHomepageSections(tenant, featuredProperties, testimonials, advisors, faqs, language, trackingString, realVideos, realArticles);
@@ -225,6 +256,18 @@ export async function handleHomepage(options: {
         image: p.image || null
       }))
     },
+    // Estadísticas por tipo de propiedad (mismo formato que /propiedades)
+    propertyTypes: (propertyTypeStats as any[]).map((t: any) => ({
+      slug: t.slug,
+      type: t.type,           // display_name del tipo
+      name: t.type,           // alias para compatibilidad
+      count: parseInt(t.count, 10),
+      count_venta: parseInt(t.count_venta || '0', 10),
+      count_alquiler: parseInt(t.count_alquiler || '0', 10),
+      url: utils.buildUrl(`/comprar/${t.slug}`, language, trackingString)
+    })),
+    // Propiedades destacadas por tipo (top 3 tipos con sus propiedades)
+    featuredByType,
     meta: {
       timestamp: new Date().toISOString(),
       source: 'neon_edge_function',
