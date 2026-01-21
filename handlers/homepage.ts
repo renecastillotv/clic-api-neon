@@ -89,17 +89,21 @@ export async function handleHomepage(options: {
       }
     },
     relatedContent: {
-      articles: realArticles.slice(0, 4).map((a: any) => ({
-        id: a.id,
-        slug: a.slug,
-        title: a.title,
-        excerpt: a.excerpt,
-        image: a.featuredImage,
-        category: a.category?.name || '',
-        published_at: a.publishedAt,
-        author: a.author?.name || 'Equipo CLIC',
-        url: a.url
-      })),
+      articles: realArticles.slice(0, 4).map((a: any) => {
+        const fallbackAvatar = tenant.branding?.isotipo_url || tenant.branding?.logo_url || '/images/team/clic-experts.jpg';
+        return {
+          id: a.id,
+          slug: a.slug,
+          title: a.title,
+          excerpt: a.excerpt,
+          image: a.featuredImage,
+          category: a.category?.name || '',
+          published_at: a.publishedAt,
+          author: a.author?.name || 'Equipo CLIC',
+          author_avatar: a.author?.avatar || fallbackAvatar,
+          url: a.url
+        };
+      }),
       videos: realVideos.slice(0, 3).map((v: any) => ({
         id: v.id,
         slug: v.slug,
@@ -441,6 +445,7 @@ function buildHomepageSections(
     url: v.url
   }));
 
+  const fallbackAvatar = tenant.branding?.isotipo_url || tenant.branding?.logo_url || '/images/team/clic-experts.jpg';
   const formattedArticles = realArticles.slice(0, 4).map((a: any) => ({
     id: a.id,
     title: a.title,
@@ -450,13 +455,14 @@ function buildHomepageSections(
     category: a.category?.name || '',
     published_at: a.publishedAt,
     author: a.author?.name || 'Equipo CLIC',
+    author_avatar: a.author?.avatar || fallbackAvatar,
     url: a.url
   }));
 
   sections.push({
     type: 'content-mix',
     videos: formattedVideos.length > 0 ? formattedVideos : getDefaultVideos(language),
-    articles: formattedArticles.length > 0 ? formattedArticles : getDefaultArticles(language)
+    articles: formattedArticles.length > 0 ? formattedArticles : getDefaultArticles(language, tenant)
   });
 
   // Founder Story - Datos de René Castillo (hardcodeados)
@@ -486,7 +492,7 @@ function buildHomepageSections(
     },
     recentContent: {
       videos: formattedVideos.length > 0 ? formattedVideos : getDefaultVideos(language),
-      articles: formattedArticles.length > 0 ? formattedArticles : getDefaultArticles(language)
+      articles: formattedArticles.length > 0 ? formattedArticles : getDefaultArticles(language, tenant)
     }
   });
 
@@ -540,7 +546,10 @@ function getDefaultVideos(language: string): any[] {
 }
 
 // Artículos por defecto (hardcodeados)
-function getDefaultArticles(language: string): any[] {
+function getDefaultArticles(language: string, tenant?: TenantConfig): any[] {
+  const fallbackAvatar = tenant?.branding?.isotipo_url || tenant?.branding?.logo_url || '/images/team/clic-experts.jpg';
+  const teamName = getTranslatedText('Equipo CLIC', 'CLIC Team', 'Équipe CLIC', language);
+
   return [
     {
       id: 'article-1',
@@ -555,7 +564,8 @@ function getDefaultArticles(language: string): any[] {
       slug: 'guia-inversion-bienes-raices-rd',
       category: getTranslatedText('Inversión', 'Investment', 'Investissement', language),
       published_at: '2024-01-10',
-      author: 'René Castillo'
+      author: 'René Castillo',
+      author_avatar: 'https://pacewqgypevfgjmdsorz.supabase.co/storage/v1/object/public/public-assets/images/rene%20castillo%20-clic%20con%20placa.png'
     },
     {
       id: 'article-2',
@@ -570,7 +580,8 @@ function getDefaultArticles(language: string): any[] {
       slug: 'mejores-zonas-santo-domingo',
       category: getTranslatedText('Guías', 'Guides', 'Guides', language),
       published_at: '2024-02-05',
-      author: 'Equipo CLIC'
+      author: teamName,
+      author_avatar: fallbackAvatar
     }
   ];
 }

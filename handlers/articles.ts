@@ -161,7 +161,8 @@ function processArticle(
   item: Record<string, any>,
   language: string,
   trackingString: string,
-  includeContent: boolean = false
+  includeContent: boolean = false,
+  tenant?: TenantConfig
 ): Article {
   // Procesar traducciones
   const processed = utils.processTranslations(item, language);
@@ -184,13 +185,14 @@ function processArticle(
     : `/${language}/articles/${categorySlug}/${articleSlug}`;
   const url = basePath + trackingString;
 
-  // Procesar autor
+  // Procesar autor - usar isotipo del tenant como fallback para avatar
+  const fallbackAvatar = tenant?.branding?.isotipo_url || tenant?.branding?.logo_url || '/images/team/clic-experts.jpg';
   const author: Author = {
     id: processed.autor_id || '',
     name: processed.autor_nombre
       ? `${processed.autor_nombre} ${processed.autor_apellido || ''}`.trim()
       : getUIText('TEAM_CLIC', language),
-    avatar: processed.autor_foto || processed.autor_avatar || '/images/team/clic-experts.jpg',
+    avatar: processed.autor_foto || processed.autor_avatar || fallbackAvatar,
     slug: processed.autor_slug || null,
     position: processed.autor_cargo || processed.autor_titulo_profesional || null,
     bio: processed.autor_bio || processed.autor_biografia || null,
@@ -348,12 +350,12 @@ async function handleArticlesMain(options: {
 
     // Procesar artículos destacados
     const featuredArticles = (featuredResult as any[]).map((item: any) =>
-      processArticle(item, language, trackingString)
+      processArticle(item, language, trackingString, false, tenant)
     );
 
     // Procesar artículos recientes
     const recentArticles = (recentResult as any[]).map((item: any) =>
-      processArticle(item, language, trackingString)
+      processArticle(item, language, trackingString, false, tenant)
     );
 
     // Procesar categorías - filtrar las que no tienen artículos y agregar URL
@@ -614,7 +616,7 @@ async function handleArticlesCategory(options: {
 
   // Procesar artículos
   const articles = (articlesResult as any[]).map((item: any) =>
-    processArticle(item, language, trackingString)
+    processArticle(item, language, trackingString, false, tenant)
   );
 
   // Paginación
@@ -700,7 +702,7 @@ async function handleSingleArticle(options: {
   const articleData = articleResult[0] as any;
 
   // Procesar artículo completo (con contenido)
-  const article = processArticle(articleData, language, trackingString, true);
+  const article = processArticle(articleData, language, trackingString, true, tenant);
 
   // Procesar categoría
   const category: ArticleCategory = {
@@ -744,7 +746,7 @@ async function handleSingleArticle(options: {
 
   // Procesar artículos relacionados
   const relatedArticles = (relatedResult as any[]).map((item: any) =>
-    processArticle(item, language, trackingString)
+    processArticle(item, language, trackingString, false, tenant)
   );
 
   // Incrementar vistas (fire and forget)
