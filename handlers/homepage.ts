@@ -143,26 +143,29 @@ export async function handleHomepage(options: {
     searchTags,
     hotItems: {
       // Usar locationStats con datos enriquecidos (imagen, count_venta, count_alquiler)
+      // Campos compatibles con PopularLocations.astro: title, url, image, property_count
       cities: locationStats.cities.slice(0, 8).map((c: any) => ({
         slug: c.slug,
-        title: c.name,
+        title: c.name,          // PopularLocations usa title
         name: c.name,
         url: utils.buildUrl(`/comprar/${c.slug}`, language, trackingString),
+        image: c.image || null, // PopularLocations usa image
+        property_count: parseInt(c.count, 10),  // PopularLocations usa property_count
         count: parseInt(c.count, 10),
         count_venta: parseInt(c.count_venta || '0', 10),
         count_alquiler: parseInt(c.count_alquiler || '0', 10),
-        image: c.image || null,
         parent_slug: c.parent_slug || null
       })),
       sectors: locationStats.sectors.slice(0, 12).map((s: any) => ({
         slug: s.slug,
-        title: s.name,
+        title: s.name,          // PopularLocations usa title
         name: s.name,
         url: utils.buildUrl(`/comprar/${s.slug}`, language, trackingString),
+        image: s.image || null, // PopularLocations usa image
+        property_count: parseInt(s.count, 10),  // PopularLocations usa property_count
         count: parseInt(s.count, 10),
         count_venta: parseInt(s.count_venta || '0', 10),
         count_alquiler: parseInt(s.count_alquiler || '0', 10),
-        image: s.image || null,
         parent_slug: s.parent_slug || null
       })),
       properties: properties.slice(0, 6),
