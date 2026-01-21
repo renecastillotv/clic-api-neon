@@ -265,13 +265,21 @@ async function handleArticlesMain(options: {
         a.destacado,
         a.traducciones,
         a.categoria_id,
-        a.autor_nombre,
-        a.autor_foto,
+        a.autor_id,
+        COALESCE(u.nombre, a.autor_nombre) as autor_nombre,
+        u.apellido as autor_apellido,
+        COALESCE(pa.foto_url, u.avatar_url, a.autor_foto) as autor_foto,
+        u.avatar_url as autor_avatar,
+        pa.slug as autor_slug,
+        pa.titulo_profesional as autor_cargo,
+        pa.biografia as autor_bio,
         cc.slug as categoria_slug,
         cc.nombre as categoria_nombre,
         cc.traducciones as categoria_traducciones
       FROM articulos a
       LEFT JOIN categorias_contenido cc ON a.categoria_id = cc.id
+      LEFT JOIN usuarios u ON a.autor_id = u.id
+      LEFT JOIN perfiles_asesor pa ON u.id = pa.usuario_id AND pa.tenant_id = a.tenant_id
       WHERE a.tenant_id = ${tenant.id}
         AND a.publicado = true
         AND a.destacado = true
@@ -292,13 +300,21 @@ async function handleArticlesMain(options: {
         a.destacado,
         a.traducciones,
         a.categoria_id,
-        a.autor_nombre,
-        a.autor_foto,
+        a.autor_id,
+        COALESCE(u.nombre, a.autor_nombre) as autor_nombre,
+        u.apellido as autor_apellido,
+        COALESCE(pa.foto_url, u.avatar_url, a.autor_foto) as autor_foto,
+        u.avatar_url as autor_avatar,
+        pa.slug as autor_slug,
+        pa.titulo_profesional as autor_cargo,
+        pa.biografia as autor_bio,
         cc.slug as categoria_slug,
         cc.nombre as categoria_nombre,
         cc.traducciones as categoria_traducciones
       FROM articulos a
       LEFT JOIN categorias_contenido cc ON a.categoria_id = cc.id
+      LEFT JOIN usuarios u ON a.autor_id = u.id
+      LEFT JOIN perfiles_asesor pa ON u.id = pa.usuario_id AND pa.tenant_id = a.tenant_id
       WHERE a.tenant_id = ${tenant.id}
         AND a.publicado = true
       ORDER BY a.destacado DESC, a.fecha_publicacion DESC NULLS LAST
@@ -534,11 +550,19 @@ async function handleArticlesCategory(options: {
         a.destacado,
         a.traducciones,
         a.categoria_id,
-        a.autor_nombre,
-        a.autor_foto,
+        a.autor_id,
+        COALESCE(u.nombre, a.autor_nombre) as autor_nombre,
+        u.apellido as autor_apellido,
+        COALESCE(pa.foto_url, u.avatar_url, a.autor_foto) as autor_foto,
+        u.avatar_url as autor_avatar,
+        pa.slug as autor_slug,
+        pa.titulo_profesional as autor_cargo,
+        pa.biografia as autor_bio,
         'general' as categoria_slug,
         ${category.name} as categoria_nombre
       FROM articulos a
+      LEFT JOIN usuarios u ON a.autor_id = u.id
+      LEFT JOIN perfiles_asesor pa ON u.id = pa.usuario_id AND pa.tenant_id = a.tenant_id
       WHERE a.tenant_id = ${tenant.id}
         AND a.publicado = true
         AND a.categoria_id IS NULL
@@ -591,11 +615,19 @@ async function handleArticlesCategory(options: {
         a.destacado,
         a.traducciones,
         a.categoria_id,
-        a.autor_nombre,
-        a.autor_foto,
+        a.autor_id,
+        COALESCE(u.nombre, a.autor_nombre) as autor_nombre,
+        u.apellido as autor_apellido,
+        COALESCE(pa.foto_url, u.avatar_url, a.autor_foto) as autor_foto,
+        u.avatar_url as autor_avatar,
+        pa.slug as autor_slug,
+        pa.titulo_profesional as autor_cargo,
+        pa.biografia as autor_bio,
         ${categoryData.slug} as categoria_slug,
         ${categoryData.name} as categoria_nombre
       FROM articulos a
+      LEFT JOIN usuarios u ON a.autor_id = u.id
+      LEFT JOIN perfiles_asesor pa ON u.id = pa.usuario_id AND pa.tenant_id = a.tenant_id
       WHERE a.tenant_id = ${tenant.id}
         AND a.categoria_id = ${categoryData.id}
         AND a.publicado = true
@@ -678,8 +710,16 @@ async function handleSingleArticle(options: {
       a.destacado,
       a.traducciones,
       a.categoria_id,
-      a.autor_nombre,
-      a.autor_foto,
+      a.autor_id,
+      COALESCE(u.nombre, a.autor_nombre) as autor_nombre,
+      u.apellido as autor_apellido,
+      COALESCE(pa.foto_url, u.avatar_url, a.autor_foto) as autor_foto,
+      u.avatar_url as autor_avatar,
+      pa.slug as autor_slug,
+      pa.titulo_profesional as autor_cargo,
+      pa.biografia as autor_bio,
+      u.email as autor_email,
+      pa.telefono as autor_telefono,
       a.meta_titulo,
       a.meta_descripcion,
       a.tags,
@@ -689,6 +729,8 @@ async function handleSingleArticle(options: {
       cc.traducciones as categoria_traducciones
     FROM articulos a
     LEFT JOIN categorias_contenido cc ON a.categoria_id = cc.id
+    LEFT JOIN usuarios u ON a.autor_id = u.id
+    LEFT JOIN perfiles_asesor pa ON u.id = pa.usuario_id AND pa.tenant_id = a.tenant_id
     WHERE a.tenant_id = ${tenant.id}
       AND a.slug = ${articleSlug}
       AND a.publicado = true
@@ -729,12 +771,19 @@ async function handleSingleArticle(options: {
       a.destacado,
       a.traducciones,
       a.categoria_id,
-      a.autor_nombre,
-      a.autor_foto,
+      a.autor_id,
+      COALESCE(u.nombre, a.autor_nombre) as autor_nombre,
+      u.apellido as autor_apellido,
+      COALESCE(pa.foto_url, u.avatar_url, a.autor_foto) as autor_foto,
+      u.avatar_url as autor_avatar,
+      pa.slug as autor_slug,
+      pa.titulo_profesional as autor_cargo,
       cc.slug as categoria_slug,
       cc.nombre as categoria_nombre
     FROM articulos a
     LEFT JOIN categorias_contenido cc ON a.categoria_id = cc.id
+    LEFT JOIN usuarios u ON a.autor_id = u.id
+    LEFT JOIN perfiles_asesor pa ON u.id = pa.usuario_id AND pa.tenant_id = a.tenant_id
     WHERE a.tenant_id = ${tenant.id}
       AND a.publicado = true
       AND a.id != ${articleData.id}
