@@ -22,7 +22,7 @@ export async function handleHomepage(options: {
   // Obtener datos en paralelo usando las funciones de db.ts
   const [
     featuredProperties,
-    popularLocations,
+    locationStats,
     quickStats,
     testimonials,
     advisors,
@@ -32,7 +32,7 @@ export async function handleHomepage(options: {
     filterOptions
   ] = await Promise.all([
     db.getFeaturedProperties(tenant.id, 12),
-    db.getPopularLocations(tenant.id),
+    db.getLocationStats(tenant.id),  // Usar getLocationStats para datos enriquecidos con imágenes
     db.getQuickStats(tenant.id),
     db.getTestimonials(tenant.id, 6),
     db.getAdvisors(tenant.id, 4),
@@ -142,17 +142,28 @@ export async function handleHomepage(options: {
     sections,
     searchTags,
     hotItems: {
-      cities: popularLocations.cities.map((c: any) => ({
+      // Usar locationStats con datos enriquecidos (imagen, count_venta, count_alquiler)
+      cities: locationStats.cities.slice(0, 8).map((c: any) => ({
         slug: c.slug,
         title: c.name,
+        name: c.name,
         url: utils.buildUrl(`/comprar/${c.slug}`, language, trackingString),
-        count: parseInt(c.count, 10)
+        count: parseInt(c.count, 10),
+        count_venta: parseInt(c.count_venta || '0', 10),
+        count_alquiler: parseInt(c.count_alquiler || '0', 10),
+        image: c.image || null,
+        parent_slug: c.parent_slug || null
       })),
-      sectors: popularLocations.sectors.map((s: any) => ({
+      sectors: locationStats.sectors.slice(0, 12).map((s: any) => ({
         slug: s.slug,
         title: s.name,
+        name: s.name,
         url: utils.buildUrl(`/comprar/${s.slug}`, language, trackingString),
-        count: parseInt(s.count, 10)
+        count: parseInt(s.count, 10),
+        count_venta: parseInt(s.count_venta || '0', 10),
+        count_alquiler: parseInt(s.count_alquiler || '0', 10),
+        image: s.image || null,
+        parent_slug: s.parent_slug || null
       })),
       properties: properties.slice(0, 6),
       agents: advisors.slice(0, 4).map((a: any) => ({
@@ -182,6 +193,35 @@ export async function handleHomepage(options: {
       destacado: a.destacado,
       url: utils.buildUrl(`/asesores/${a.slug}`, language, trackingString)
     })),
+    // Datos de ubicaciones enriquecidos (mismo formato que /ubicaciones)
+    locations: {
+      cities: locationStats.cities.slice(0, 8).map((c: any) => ({
+        name: c.name,
+        slug: c.slug,
+        count: parseInt(c.count, 10),
+        count_venta: parseInt(c.count_venta || '0', 10),
+        count_alquiler: parseInt(c.count_alquiler || '0', 10),
+        parent_slug: c.parent_slug || null,
+        image: c.image || null
+      })),
+      sectors: locationStats.sectors.slice(0, 12).map((s: any) => ({
+        name: s.name,
+        slug: s.slug,
+        count: parseInt(s.count, 10),
+        count_venta: parseInt(s.count_venta || '0', 10),
+        count_alquiler: parseInt(s.count_alquiler || '0', 10),
+        parent_slug: s.parent_slug || null,
+        image: s.image || null
+      })),
+      provinces: (locationStats.provinces || []).slice(0, 6).map((p: any) => ({
+        name: p.name,
+        slug: p.slug,
+        count: parseInt(p.count, 10),
+        count_venta: parseInt(p.count_venta || '0', 10),
+        count_alquiler: parseInt(p.count_alquiler || '0', 10),
+        image: p.image || null
+      }))
+    },
     meta: {
       timestamp: new Date().toISOString(),
       source: 'neon_edge_function',
