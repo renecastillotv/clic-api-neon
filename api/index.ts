@@ -504,29 +504,35 @@ async function getTenantConfig(domain: string): Promise<TenantConfig | null> {
   // Parsear configuración JSONB
   const config = tenantData.config || tenantData.configuracion || {};
   const infoNegocio = tenantData.info_negocio || {};
+  // Extraer contacto anidado (estructura real: info_negocio.contacto.telefono)
+  const contactoNegocio = infoNegocio.contacto || {};
+  // Extraer ubicación anidada
+  const ubicacionNegocio = infoNegocio.ubicacion || {};
 
   return {
     id: tenantData.id, // UUID string
     slug: tenantData.slug,
-    name: tenantData.nombre || infoNegocio.nombre_comercial || config.company_name || 'Inmobiliaria',
+    name: tenantData.nombre || infoNegocio.nombreComercial || config.company_name || 'Inmobiliaria',
     domain: tenantData.dominio_personalizado || domain,
     asesor_default_id: tenantData.asesor_default_id || null,
 
     branding: {
-      logo_url: config.logo_url || infoNegocio.logo_url,
-      favicon_url: config.favicon_url,
-      primary_color: config.primary_color || infoNegocio.color_primario,
-      secondary_color: config.secondary_color || infoNegocio.color_secundario,
+      logo_url: infoNegocio.logo || config.logo_url,
+      logo_white_url: infoNegocio.logoBlanco || null,
+      isotipo_url: infoNegocio.isotipo || null, // Para usar como avatar en fallbacks
+      favicon_url: infoNegocio.favicon || config.favicon_url,
+      primary_color: infoNegocio.colorPrimario || config.primary_color,
+      secondary_color: infoNegocio.colorSecundario || config.secondary_color,
     },
 
     contact: {
-      phone: infoNegocio.telefono || config.phone,
-      whatsapp: infoNegocio.whatsapp || config.whatsapp,
-      email: infoNegocio.email || config.email,
-      address: infoNegocio.direccion || config.address,
+      phone: contactoNegocio.telefono || infoNegocio.telefono || config.phone,
+      whatsapp: contactoNegocio.whatsapp || infoNegocio.whatsapp || config.whatsapp,
+      email: contactoNegocio.email || infoNegocio.email || config.email,
+      address: ubicacionNegocio.direccion || infoNegocio.direccion || config.address,
     },
 
-    social: infoNegocio.redes_sociales || config.social || {},
+    social: infoNegocio.redesSociales || config.social || {},
 
     features: {
       vacation_rentals: config.features?.vacation_rentals !== false,

@@ -448,6 +448,8 @@ export interface TenantConfig {
   // Configuración visual
   branding: {
     logo_url?: string;
+    logo_white_url?: string;
+    isotipo_url?: string; // Isotipo para usar como avatar en fallbacks
     favicon_url?: string;
     primary_color?: string;
     secondary_color?: string;

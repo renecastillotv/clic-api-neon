@@ -77,6 +77,12 @@ function formatAdvisorData(advisor: any, source: string = 'captador'): any {
 
 // Crear fallback de empresa cuando no hay asesor disponible
 function createCompanyFallback(tenant: TenantConfig): any {
+  // Usar isotipo como avatar (mejor para foto de perfil), fallback a logo
+  const avatarUrl = tenant.branding?.isotipo_url || tenant.branding?.logo_url || '';
+  // Formatear teléfono para WhatsApp (quitar caracteres no numéricos)
+  const whatsappNumber = tenant.contact?.whatsapp || tenant.contact?.phone || '';
+  const whatsappClean = whatsappNumber.replace(/[^\d]/g, '');
+
   return {
     id: 'company-fallback',
     user_id: null,
@@ -85,11 +91,11 @@ function createCompanyFallback(tenant: TenantConfig): any {
     first_name: 'Equipo de',
     last_name: 'Asistencia',
     phone: tenant.contact?.phone || '',
-    whatsapp: tenant.contact?.whatsapp || tenant.contact?.phone || '',
+    whatsapp: whatsappNumber,
     email: tenant.contact?.email || '',
     position: 'Atención al Cliente',
-    profile_photo_url: tenant.branding?.logo_url || '',
-    image: tenant.branding?.logo_url || '',
+    profile_photo_url: avatarUrl,
+    image: avatarUrl,
     rating: 5.0,
     external_id: 'company',
     code: 'CLIC',
@@ -105,7 +111,7 @@ function createCompanyFallback(tenant: TenantConfig): any {
     linkedin_url: tenant.social?.linkedin || null,
     twitter_url: tenant.social?.twitter || null,
     youtube_url: tenant.social?.youtube || null,
-    whatsapp_url: tenant.contact?.whatsapp ? `https://wa.me/${tenant.contact.whatsapp.replace(/[^\d]/g, '')}` : null,
+    whatsapp_url: whatsappClean ? `https://wa.me/${whatsappClean}` : null,
     social: tenant.social || {},
     active: true,
     show_on_website: true,
