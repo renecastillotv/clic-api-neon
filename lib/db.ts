@@ -401,7 +401,7 @@ export async function getAdvisorByCode(tenantId: string, codigo: string) {
   `;
 
   const advisor = (result as any[])[0] || null;
-  console.log('[getAdvisorByCode] Result:', advisor ? `Found: ${advisor.nombre} ${advisor.apellido}` : 'Not found or not qualified');
+  console.log('[getAdvisorByCode] Final query returned:', advisor ? `QUALIFIED: ${advisor.nombre} ${advisor.apellido}` : 'NOT QUALIFIED (null) - visible_en_web or activo check failed');
   return advisor;
 }
 
