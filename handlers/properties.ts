@@ -531,7 +531,7 @@ export async function handleSingleProperty(options: {
       location_display: `${p.sector || ''}, ${p.ciudad || ''}`.replace(/^, |, $/g, '') || '',
       type: p.tipo || 'Propiedad',
       category_display: p.tipo || 'Propiedad',
-      url: `/${p.slug}`,
+      url: buildPropertySlugUrl(p, language),
       is_project: p.is_project || false
     };
   });
