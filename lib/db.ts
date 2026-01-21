@@ -334,6 +334,7 @@ export async function getCocaptadoresData(tenantId: string, cocaptadoresIds: str
 
 // Obtener asesor por código (para sistema de referidos ref=CODIGO)
 // Búsqueda case-insensitive: acepta codigo o slug
+// Solo devuelve asesores activos Y visibles en web (para calificar como referidor)
 export async function getAdvisorByCode(tenantId: string, codigo: string) {
   if (!codigo) return null;
   const sql = getSQL();
@@ -342,6 +343,7 @@ export async function getAdvisorByCode(tenantId: string, codigo: string) {
   console.log('[getAdvisorByCode] Searching for code:', normalizedCode, 'in tenant:', tenantId);
 
   // Buscar por codigo O por slug (case insensitive)
+  // Requiere: activo=true, visible_en_web=true, usuario activo
   const result = await sql`
     SELECT
       u.id as usuario_id,
@@ -371,12 +373,13 @@ export async function getAdvisorByCode(tenantId: string, codigo: string) {
         OR LOWER(pa.slug) = LOWER(${normalizedCode})
       )
       AND pa.activo = true
+      AND COALESCE(pa.visible_en_web, true) = true
       AND u.activo = true
     LIMIT 1
   `;
 
   const advisor = (result as any[])[0] || null;
-  console.log('[getAdvisorByCode] Result:', advisor ? `Found: ${advisor.nombre} ${advisor.apellido}` : 'Not found');
+  console.log('[getAdvisorByCode] Result:', advisor ? `Found: ${advisor.nombre} ${advisor.apellido} (visible_en_web: true)` : 'Not found or not visible');
   return advisor;
 }
 
