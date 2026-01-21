@@ -16,6 +16,7 @@ interface VideoCategory {
   slug: string;
   description?: string;
   videoCount?: number;
+  url?: string;
 }
 
 interface Video {
@@ -458,18 +459,21 @@ async function handleVideosMain(options: {
       processVideo(item, language, trackingString)
     );
 
-    // Procesar categorías
+    // Procesar categorías - filtrar las que no tienen videos y agregar URL
     const categories: VideoCategory[] = (categoriesResult as any[])
       .map((cat: any) => {
         const catProcessed = utils.processTranslations(cat, language);
+        const videoCount = parseInt(cat.video_count || '0', 10);
         return {
           id: cat.id,
           name: utils.getTranslatedField(catProcessed, 'name', language) || cat.name,
           slug: cat.slug,
           description: utils.getTranslatedField(catProcessed, 'description', language) || cat.description,
-          videoCount: parseInt(cat.video_count || '0', 10),
+          videoCount,
+          url: utils.buildUrl(`/videos/${cat.slug}`, language),
         };
-      });
+      })
+      .filter((cat) => cat.videoCount > 0); // Solo mostrar categorías con videos
 
     // Verificar si hay videos sin categoría
     const uncategorizedResult = await sql`
@@ -493,6 +497,7 @@ async function handleVideosMain(options: {
         slug: 'general',
         description: language === 'es' ? 'Videos generales' : 'General videos',
         videoCount: uncategorizedCount,
+        url: utils.buildUrl('/videos/general', language),
       });
     }
 

@@ -27,6 +27,7 @@ interface ArticleCategory {
   slug: string;
   description?: string;
   articleCount?: number;
+  url?: string;
 }
 
 interface Article {
@@ -355,18 +356,21 @@ async function handleArticlesMain(options: {
       processArticle(item, language, trackingString)
     );
 
-    // Procesar categorías - mostrar TODAS las categorías de tipo 'articulo'
+    // Procesar categorías - filtrar las que no tienen artículos y agregar URL
     const categories: ArticleCategory[] = (categoriesResult as any[])
       .map((cat: any) => {
         const catProcessed = utils.processTranslations(cat, language);
+        const articleCount = parseInt(cat.article_count || '0', 10);
         return {
           id: cat.id,
           name: utils.getTranslatedField(catProcessed, 'name', language) || cat.name,
           slug: cat.slug,
           description: utils.getTranslatedField(catProcessed, 'description', language) || cat.description,
-          articleCount: parseInt(cat.article_count || '0', 10),
+          articleCount,
+          url: utils.buildUrl(`/articulos/${cat.slug}`, language),
         };
-      });
+      })
+      .filter((cat) => cat.articleCount > 0); // Solo mostrar categorías con artículos
 
     // Verificar si hay artículos sin categoría
     const uncategorizedResult = await sql`
@@ -391,6 +395,7 @@ async function handleArticlesMain(options: {
         slug: 'general',
         description: language === 'es' ? 'Artículos generales' : 'General articles',
         articleCount: uncategorizedCount,
+        url: utils.buildUrl('/articulos/general', language),
       });
     }
 
