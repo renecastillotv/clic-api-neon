@@ -288,7 +288,11 @@ export async function getPropertyBySlug(slug: string, tenantId: string) {
       pa.whatsapp as agente_whatsapp,
       pa.telefono_directo as agente_telefono_directo,
       pa.titulo_profesional as agente_titulo,
-      pa.especialidades as agente_especialidades
+      pa.especialidades as agente_especialidades,
+      -- Campos de validación para sistema de prioridades
+      pa.activo as agente_activo,
+      pa.visible_en_web as agente_visible_en_web,
+      u_captador.activo as agente_usuario_activo
     FROM propiedades p
     -- JOIN con usuarios usando captador_id
     LEFT JOIN usuarios u_captador ON p.captador_id = u_captador.id
@@ -315,6 +319,7 @@ export async function getCocaptadoresData(tenantId: string, cocaptadoresIds: str
       u.email,
       u.telefono,
       u.avatar_url,
+      u.activo as usuario_activo,
       pa.id as perfil_id,
       pa.slug,
       pa.foto_url,
@@ -322,11 +327,12 @@ export async function getCocaptadoresData(tenantId: string, cocaptadoresIds: str
       pa.experiencia_anos,
       pa.titulo_profesional,
       pa.whatsapp,
-      pa.telefono_directo
+      pa.telefono_directo,
+      pa.activo as perfil_activo,
+      pa.visible_en_web
     FROM usuarios u
     LEFT JOIN perfiles_asesor pa ON pa.usuario_id = u.id AND pa.tenant_id = ${tenantId}
     WHERE u.id = ANY(${cocaptadoresIds}::uuid[])
-      AND u.activo = true
     ORDER BY u.nombre ASC
   `;
   return result;
