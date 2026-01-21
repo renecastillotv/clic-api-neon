@@ -710,8 +710,11 @@ export async function handleSingleProperty(options: {
     console.log('[handleSingleProperty] Priority 3 - Using COMPANY FALLBACK (Equipo de Asistencia)');
   }
 
-  // Formatear cocaptadores: solo los que califiquen (3 condiciones) y excluir el que se usó como main
-  const formattedCocaptores = cocaptadoresArray
+  // Formatear cocaptadores: NO mostrar si hay ref válido (para no desviar atención del referidor)
+  // Si no hay ref, mostrar solo los que califiquen (3 condiciones) y excluir el que se usó como main
+  const formattedCocaptores = agentSource === 'ref'
+    ? [] // Si es referido, no mostrar cocaptadores
+    : cocaptadoresArray
     .filter((c: any) => {
       // Excluir el que ya se usó como agente principal
       if (agentSource === 'cocaptador' && c.usuario_id === agentMain?.id) return false;
