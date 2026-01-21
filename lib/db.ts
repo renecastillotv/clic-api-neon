@@ -333,9 +333,15 @@ export async function getCocaptadoresData(tenantId: string, cocaptadoresIds: str
 }
 
 // Obtener asesor por código (para sistema de referidos ref=CODIGO)
+// Búsqueda case-insensitive: acepta codigo o slug
 export async function getAdvisorByCode(tenantId: string, codigo: string) {
   if (!codigo) return null;
   const sql = getSQL();
+  const normalizedCode = codigo.trim();
+
+  console.log('[getAdvisorByCode] Searching for code:', normalizedCode, 'in tenant:', tenantId);
+
+  // Buscar por codigo O por slug (case insensitive)
   const result = await sql`
     SELECT
       u.id as usuario_id,
@@ -360,12 +366,18 @@ export async function getAdvisorByCode(tenantId: string, codigo: string) {
     FROM perfiles_asesor pa
     JOIN usuarios u ON pa.usuario_id = u.id
     WHERE pa.tenant_id = ${tenantId}
-      AND pa.codigo = ${codigo.toUpperCase()}
+      AND (
+        LOWER(pa.codigo) = LOWER(${normalizedCode})
+        OR LOWER(pa.slug) = LOWER(${normalizedCode})
+      )
       AND pa.activo = true
       AND u.activo = true
     LIMIT 1
   `;
-  return result[0] || null;
+
+  const advisor = (result as any[])[0] || null;
+  console.log('[getAdvisorByCode] Result:', advisor ? `Found: ${advisor.nombre} ${advisor.apellido}` : 'Not found');
+  return advisor;
 }
 
 // Obtener asesor por ID de usuario (para tenant default advisor)
