@@ -719,7 +719,7 @@ async function handleSingleArticle(options: {
       pa.titulo_profesional as autor_cargo,
       pa.biografia as autor_bio,
       u.email as autor_email,
-      pa.telefono as autor_telefono,
+      u.telefono as autor_telefono,
       a.meta_titulo,
       a.meta_descripcion,
       a.tags,
