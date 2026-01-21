@@ -24,6 +24,55 @@ function formatVideoDuration(seconds: number | null | undefined): string {
   return `${mins}:${secs.toString().padStart(2, '0')}`;
 }
 
+// Normalizar URL de red social a URL completa
+function normalizeSocialUrl(value: string | null | undefined, platform: string): string | null {
+  if (!value) return null;
+
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+
+  // Si ya es una URL completa válida, devolverla
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+    return trimmed;
+  }
+
+  // Quitar @ inicial si existe (común en usernames)
+  const cleanValue = trimmed.startsWith('@') ? trimmed.slice(1) : trimmed;
+
+  // Construir URL completa según la plataforma
+  const baseUrls: Record<string, string> = {
+    facebook: 'https://facebook.com/',
+    instagram: 'https://instagram.com/',
+    linkedin: 'https://linkedin.com/in/',
+    twitter: 'https://twitter.com/',
+    youtube: 'https://youtube.com/',
+    tiktok: 'https://tiktok.com/@'
+  };
+
+  const baseUrl = baseUrls[platform.toLowerCase()];
+  if (!baseUrl) return trimmed; // Plataforma desconocida, devolver valor tal cual
+
+  return `${baseUrl}${cleanValue}`;
+}
+
+// Formatear objeto de redes sociales a URLs completas
+function formatSocialUrls(socialNetworks: Record<string, string> | null | undefined): {
+  facebook_url: string | null;
+  instagram_url: string | null;
+  linkedin_url: string | null;
+  twitter_url: string | null;
+  youtube_url: string | null;
+} {
+  const networks = socialNetworks || {};
+  return {
+    facebook_url: normalizeSocialUrl(networks.facebook, 'facebook'),
+    instagram_url: normalizeSocialUrl(networks.instagram, 'instagram'),
+    linkedin_url: normalizeSocialUrl(networks.linkedin, 'linkedin'),
+    twitter_url: normalizeSocialUrl(networks.twitter, 'twitter'),
+    youtube_url: normalizeSocialUrl(networks.youtube, 'youtube')
+  };
+}
+
 // Extraer código de referido del trackingString (ref=CODIGO)
 function extractRefCode(trackingString: string): string | null {
   if (!trackingString) return null;
@@ -36,6 +85,7 @@ function formatAdvisorData(advisor: any, source: string = 'captador'): any {
   if (!advisor) return null;
 
   const socialNetworks = advisor.redes_sociales || {};
+  const socialUrls = formatSocialUrls(socialNetworks);
 
   return {
     id: advisor.usuario_id,
@@ -62,11 +112,7 @@ function formatAdvisorData(advisor: any, source: string = 'captador'): any {
     biography: advisor.biografia || '',
     slug: advisor.slug || '',
     url: advisor.slug ? `/asesores/${advisor.slug}` : null,
-    facebook_url: socialNetworks.facebook || null,
-    instagram_url: socialNetworks.instagram || null,
-    linkedin_url: socialNetworks.linkedin || null,
-    twitter_url: socialNetworks.twitter || null,
-    youtube_url: socialNetworks.youtube || null,
+    ...socialUrls,
     whatsapp_url: advisor.whatsapp ? `https://wa.me/${advisor.whatsapp.replace(/[^\d]/g, '')}` : null,
     social: socialNetworks,
     active: true,
@@ -82,6 +128,8 @@ function createCompanyFallback(tenant: TenantConfig): any {
   // Formatear teléfono para WhatsApp (quitar caracteres no numéricos)
   const whatsappNumber = tenant.contact?.whatsapp || tenant.contact?.phone || '';
   const whatsappClean = whatsappNumber.replace(/[^\d]/g, '');
+  // Normalizar URLs de redes sociales
+  const socialUrls = formatSocialUrls(tenant.social);
 
   return {
     id: 'company-fallback',
@@ -106,11 +154,7 @@ function createCompanyFallback(tenant: TenantConfig): any {
     biography: '',
     slug: '',
     url: '/contacto',
-    facebook_url: tenant.social?.facebook || null,
-    instagram_url: tenant.social?.instagram || null,
-    linkedin_url: tenant.social?.linkedin || null,
-    twitter_url: tenant.social?.twitter || null,
-    youtube_url: tenant.social?.youtube || null,
+    ...socialUrls,
     whatsapp_url: whatsappClean ? `https://wa.me/${whatsappClean}` : null,
     social: tenant.social || {},
     active: true,
@@ -553,6 +597,7 @@ export async function handleSingleProperty(options: {
   else if (captadorId && rawProperty.agente_nombre) {
     // El captador viene del JOIN, verificar que tenga datos válidos
     const socialNetworks = rawProperty.agente_redes_sociales || {};
+    const socialUrls = formatSocialUrls(socialNetworks);
     agentMain = {
       id: captadorId,
       user_id: rawProperty.captador_usuario_id || captadorId,
@@ -578,11 +623,7 @@ export async function handleSingleProperty(options: {
       biography: rawProperty.agente_biografia || '',
       slug: rawProperty.agente_slug || '',
       url: rawProperty.agente_slug ? `/asesores/${rawProperty.agente_slug}` : null,
-      facebook_url: socialNetworks.facebook || null,
-      instagram_url: socialNetworks.instagram || null,
-      linkedin_url: socialNetworks.linkedin || null,
-      twitter_url: socialNetworks.twitter || null,
-      youtube_url: socialNetworks.youtube || null,
+      ...socialUrls,
       whatsapp_url: rawProperty.agente_whatsapp ? `https://wa.me/${rawProperty.agente_whatsapp.replace(/[^\d]/g, '')}` : null,
       social: socialNetworks,
       active: true,
