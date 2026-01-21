@@ -330,12 +330,17 @@ async function handleVideosMain(options: {
         v.traducciones,
         v.categoria_id,
         v.tags,
-        v.autor_nombre,
-        v.autor_foto,
+        u.nombre as autor_nombre,
+        u.apellido as autor_apellido,
+        pa.foto_url as autor_foto,
+        pa.slug as autor_slug,
+        pa.titulo_profesional as autor_cargo,
         cc.slug as categoria_slug,
         cc.nombre as categoria_nombre
       FROM videos v
       LEFT JOIN categorias_contenido cc ON v.categoria_id = cc.id
+      LEFT JOIN usuarios u ON v.autor_id = u.id
+      LEFT JOIN perfiles_asesor pa ON u.id = pa.usuario_id AND pa.tenant_id = v.tenant_id
       WHERE v.tenant_id = ${tenant.id}::uuid
         AND v.publicado = true
         AND v.destacado = true
@@ -365,12 +370,17 @@ async function handleVideosMain(options: {
           v.destacado,
           v.traducciones,
           v.categoria_id,
-          v.autor_nombre,
-          v.autor_foto,
+          u.nombre as autor_nombre,
+          u.apellido as autor_apellido,
+          pa.foto_url as autor_foto,
+          pa.slug as autor_slug,
+          pa.titulo_profesional as autor_cargo,
           cc.slug as categoria_slug,
           cc.nombre as categoria_nombre
         FROM videos v
         LEFT JOIN categorias_contenido cc ON v.categoria_id = cc.id
+        LEFT JOIN usuarios u ON v.autor_id = u.id
+        LEFT JOIN perfiles_asesor pa ON u.id = pa.usuario_id AND pa.tenant_id = v.tenant_id
         WHERE v.tenant_id = ${tenant.id}::uuid
           AND v.publicado = true
           AND v.destacado = true
@@ -395,12 +405,17 @@ async function handleVideosMain(options: {
           v.destacado,
           v.traducciones,
           v.categoria_id,
-          v.autor_nombre,
-          v.autor_foto,
+          u.nombre as autor_nombre,
+          u.apellido as autor_apellido,
+          pa.foto_url as autor_foto,
+          pa.slug as autor_slug,
+          pa.titulo_profesional as autor_cargo,
           cc.slug as categoria_slug,
           cc.nombre as categoria_nombre
         FROM videos v
         LEFT JOIN categorias_contenido cc ON v.categoria_id = cc.id
+        LEFT JOIN usuarios u ON v.autor_id = u.id
+        LEFT JOIN perfiles_asesor pa ON u.id = pa.usuario_id AND pa.tenant_id = v.tenant_id
         WHERE v.tenant_id = ${tenant.id}::uuid
           AND v.publicado = true
           AND v.destacado = true
@@ -426,12 +441,17 @@ async function handleVideosMain(options: {
         v.destacado,
         v.traducciones,
         v.categoria_id,
-        v.autor_nombre,
-        v.autor_foto,
+        u.nombre as autor_nombre,
+        u.apellido as autor_apellido,
+        pa.foto_url as autor_foto,
+        pa.slug as autor_slug,
+        pa.titulo_profesional as autor_cargo,
         cc.slug as categoria_slug,
         cc.nombre as categoria_nombre
       FROM videos v
       LEFT JOIN categorias_contenido cc ON v.categoria_id = cc.id
+      LEFT JOIN usuarios u ON v.autor_id = u.id
+      LEFT JOIN perfiles_asesor pa ON u.id = pa.usuario_id AND pa.tenant_id = v.tenant_id
       WHERE v.tenant_id = ${tenant.id}::uuid
         AND v.publicado = true
       ORDER BY v.destacado DESC, v.fecha_publicacion DESC NULLS LAST
@@ -670,11 +690,16 @@ async function handleVideosCategory(options: {
         v.destacado,
         v.traducciones,
         v.categoria_id,
-        v.autor_nombre,
-        v.autor_foto,
+        u.nombre as autor_nombre,
+        u.apellido as autor_apellido,
+        pa.foto_url as autor_foto,
+        pa.slug as autor_slug,
+        pa.titulo_profesional as autor_cargo,
         'general' as categoria_slug,
         ${category.name} as categoria_nombre
       FROM videos v
+      LEFT JOIN usuarios u ON v.autor_id = u.id
+      LEFT JOIN perfiles_asesor pa ON u.id = pa.usuario_id AND pa.tenant_id = v.tenant_id
       WHERE v.tenant_id = ${tenant.id}::uuid
         AND v.publicado = true
         AND v.categoria_id IS NULL
@@ -730,11 +755,17 @@ async function handleVideosCategory(options: {
         v.destacado,
         v.traducciones,
         v.categoria_id,
-        v.autor_nombre,
-        v.autor_foto,
+        v.autor_id,
+        u.nombre as autor_nombre,
+        u.apellido as autor_apellido,
+        pa.foto_url as autor_foto,
+        pa.slug as autor_slug,
+        pa.titulo_profesional as autor_cargo,
         ${categoryData.slug} as categoria_slug,
         ${categoryData.name} as categoria_nombre
       FROM videos v
+      LEFT JOIN usuarios u ON v.autor_id = u.id
+      LEFT JOIN perfiles_asesor pa ON u.id = pa.usuario_id AND pa.tenant_id = v.tenant_id
       WHERE v.tenant_id = ${tenant.id}::uuid
         AND v.categoria_id = ${categoryData.id}::uuid
         AND v.publicado = true
@@ -819,12 +850,18 @@ async function handleSingleVideo(options: {
       v.categoria_id,
       v.tags,
       v.propiedad_id,
-      v.autor_nombre,
-      v.autor_foto,
+      v.autor_id,
+      u.nombre as autor_nombre,
+      u.apellido as autor_apellido,
+      pa.foto_url as autor_foto,
+      pa.slug as autor_slug,
+      pa.titulo_profesional as autor_cargo,
       cc.slug as categoria_slug,
       cc.nombre as categoria_nombre,
       cc.descripcion as categoria_descripcion
     FROM videos v
+    LEFT JOIN usuarios u ON v.autor_id = u.id
+    LEFT JOIN perfiles_asesor pa ON u.id = pa.usuario_id AND pa.tenant_id = v.tenant_id
     LEFT JOIN categorias_contenido cc ON v.categoria_id = cc.id
     WHERE v.tenant_id = ${tenant.id}::uuid
       AND v.slug = ${videoSlug}
@@ -866,11 +903,17 @@ async function handleSingleVideo(options: {
       v.destacado,
       v.traducciones,
       v.categoria_id,
-      v.autor_nombre,
-      v.autor_foto,
+      v.autor_id,
+      u.nombre as autor_nombre,
+      u.apellido as autor_apellido,
+      pa.foto_url as autor_foto,
+      pa.slug as autor_slug,
+      pa.titulo_profesional as autor_cargo,
       cc.slug as categoria_slug,
       cc.nombre as categoria_nombre
     FROM videos v
+    LEFT JOIN usuarios u ON v.autor_id = u.id
+    LEFT JOIN perfiles_asesor pa ON u.id = pa.usuario_id AND pa.tenant_id = v.tenant_id
     LEFT JOIN categorias_contenido cc ON v.categoria_id = cc.id
     WHERE v.tenant_id = ${tenant.id}::uuid
       AND v.publicado = true
