@@ -19,6 +19,14 @@ interface VideoCategory {
   url?: string;
 }
 
+interface VideoAuthor {
+  id: string;
+  name: string;
+  avatar: string;
+  slug: string | null;
+  position: string | null;
+}
+
 interface Video {
   id: string;
   slug: string;
@@ -35,6 +43,7 @@ interface Video {
   views: number;
   featured: boolean;
   url: string;
+  author: VideoAuthor;
   category?: VideoCategory;
   property?: {
     id: string;
@@ -112,6 +121,8 @@ const UI_TEXTS: Record<string, Record<string, string>> = {
     WATCH: 'Ver video',
     NOT_FOUND: 'Video no encontrado',
     NOT_FOUND_DESC: 'El video que buscas no existe o ha sido eliminado.',
+    TEAM_CLIC: 'Equipo CLIC',
+    SPECIALIST: 'Especialista Inmobiliario',
   },
   en: {
     HOME: 'Home',
@@ -119,6 +130,8 @@ const UI_TEXTS: Record<string, Record<string, string>> = {
     WATCH: 'Watch video',
     NOT_FOUND: 'Video not found',
     NOT_FOUND_DESC: 'The video you are looking for does not exist or has been removed.',
+    TEAM_CLIC: 'CLIC Team',
+    SPECIALIST: 'Real Estate Specialist',
   },
   fr: {
     HOME: 'Accueil',
@@ -126,6 +139,8 @@ const UI_TEXTS: Record<string, Record<string, string>> = {
     WATCH: 'Voir la vidéo',
     NOT_FOUND: 'Vidéo non trouvée',
     NOT_FOUND_DESC: "La vidéo que vous recherchez n'existe pas ou a été supprimée.",
+    TEAM_CLIC: 'Équipe CLIC',
+    SPECIALIST: 'Spécialiste Immobilier',
   },
 };
 
@@ -192,7 +207,8 @@ function generateThumbnail(videoId: string | null, type: string, customThumbnail
 function processVideo(
   item: Record<string, any>,
   language: string,
-  trackingString: string
+  trackingString: string,
+  tenant?: TenantConfig
 ): Video {
   // Procesar traducciones
   const processed = utils.processTranslations(item, language);
@@ -216,6 +232,18 @@ function processVideo(
     ? `/videos/${categorySlug}/${videoSlug}`
     : `/${language}/videos/${categorySlug}/${videoSlug}`;
   const url = basePath + trackingString;
+
+  // Procesar autor - usar isotipo del tenant como fallback para avatar
+  const fallbackAvatar = tenant?.branding?.isotipo_url || tenant?.branding?.logo_url || '/images/team/clic-experts.jpg';
+  const author: VideoAuthor = {
+    id: processed.autor_id || processed.creador_id || '',
+    name: processed.autor_nombre
+      ? `${processed.autor_nombre} ${processed.autor_apellido || ''}`.trim()
+      : getUIText('TEAM_CLIC', language),
+    avatar: processed.autor_foto || processed.autor_avatar || processed.creador_foto || fallbackAvatar,
+    slug: processed.autor_slug || processed.creador_slug || null,
+    position: processed.autor_cargo || processed.autor_titulo_profesional || getUIText('SPECIALIST', language),
+  };
 
   // Procesar categoría
   const category: VideoCategory | undefined = processed.categoria_slug ? {
@@ -256,6 +284,7 @@ function processVideo(
     views: processed.vistas || 0,
     featured: processed.destacado || false,
     url,
+    author,
     category,
     property: processed.propiedad_id ? {
       id: processed.propiedad_id,
@@ -301,6 +330,8 @@ async function handleVideosMain(options: {
         v.traducciones,
         v.categoria_id,
         v.tags,
+        v.autor_nombre,
+        v.autor_foto,
         cc.slug as categoria_slug,
         cc.nombre as categoria_nombre
       FROM videos v
@@ -334,6 +365,8 @@ async function handleVideosMain(options: {
           v.destacado,
           v.traducciones,
           v.categoria_id,
+          v.autor_nombre,
+          v.autor_foto,
           cc.slug as categoria_slug,
           cc.nombre as categoria_nombre
         FROM videos v
@@ -362,6 +395,8 @@ async function handleVideosMain(options: {
           v.destacado,
           v.traducciones,
           v.categoria_id,
+          v.autor_nombre,
+          v.autor_foto,
           cc.slug as categoria_slug,
           cc.nombre as categoria_nombre
         FROM videos v
@@ -391,6 +426,8 @@ async function handleVideosMain(options: {
         v.destacado,
         v.traducciones,
         v.categoria_id,
+        v.autor_nombre,
+        v.autor_foto,
         cc.slug as categoria_slug,
         cc.nombre as categoria_nombre
       FROM videos v
@@ -446,17 +483,17 @@ async function handleVideosMain(options: {
 
     // Procesar hero video
     const heroVideo = heroResult.length > 0
-      ? processVideo((heroResult as any[])[0], language, trackingString)
+      ? processVideo((heroResult as any[])[0], language, trackingString, tenant)
       : null;
 
     // Procesar videos destacados
     const featuredVideos = (featuredResult as any[]).map((item: any) =>
-      processVideo(item, language, trackingString)
+      processVideo(item, language, trackingString, tenant)
     );
 
     // Procesar videos recientes
     const recentVideos = (recentResult as any[]).map((item: any) =>
-      processVideo(item, language, trackingString)
+      processVideo(item, language, trackingString, tenant)
     );
 
     // Procesar categorías - filtrar las que no tienen videos y agregar URL
@@ -633,6 +670,8 @@ async function handleVideosCategory(options: {
         v.destacado,
         v.traducciones,
         v.categoria_id,
+        v.autor_nombre,
+        v.autor_foto,
         'general' as categoria_slug,
         ${category.name} as categoria_nombre
       FROM videos v
@@ -691,6 +730,8 @@ async function handleVideosCategory(options: {
         v.destacado,
         v.traducciones,
         v.categoria_id,
+        v.autor_nombre,
+        v.autor_foto,
         ${categoryData.slug} as categoria_slug,
         ${categoryData.name} as categoria_nombre
       FROM videos v
@@ -713,7 +754,7 @@ async function handleVideosCategory(options: {
 
   // Procesar videos
   const videos = (videosResult as any[]).map((item: any) =>
-    processVideo(item, language, trackingString)
+    processVideo(item, language, trackingString, tenant)
   );
 
   // Paginación
@@ -778,6 +819,8 @@ async function handleSingleVideo(options: {
       v.categoria_id,
       v.tags,
       v.propiedad_id,
+      v.autor_nombre,
+      v.autor_foto,
       cc.slug as categoria_slug,
       cc.nombre as categoria_nombre,
       cc.descripcion as categoria_descripcion
@@ -796,7 +839,7 @@ async function handleSingleVideo(options: {
   const videoData = (videoResult as any[])[0];
 
   // Procesar video
-  const video = processVideo(videoData, language, trackingString);
+  const video = processVideo(videoData, language, trackingString, tenant);
 
   // Procesar categoría
   const category: VideoCategory | null = videoData.categoria_slug ? {
@@ -823,6 +866,8 @@ async function handleSingleVideo(options: {
       v.destacado,
       v.traducciones,
       v.categoria_id,
+      v.autor_nombre,
+      v.autor_foto,
       cc.slug as categoria_slug,
       cc.nombre as categoria_nombre
     FROM videos v
@@ -837,7 +882,7 @@ async function handleSingleVideo(options: {
   `;
 
   const relatedVideos = (relatedResult as any[]).map((item: any) =>
-    processVideo(item, language, trackingString)
+    processVideo(item, language, trackingString, tenant)
   );
 
   // Incrementar vistas
