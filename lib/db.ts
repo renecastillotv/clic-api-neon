@@ -1196,8 +1196,10 @@ export async function getLocationStats(tenantId: string) {
       count_venta,
       count_alquiler,
       parent_slug,
-      min_price,
-      min_price_currency
+      min_price_venta,
+      min_price_venta_currency,
+      min_price_alquiler,
+      min_price_alquiler_currency
     FROM stats_cache
     WHERE tenant_id = ${tenantId}
       AND category = 'ciudad'
@@ -1214,8 +1216,10 @@ export async function getLocationStats(tenantId: string) {
       count_venta,
       count_alquiler,
       parent_slug,
-      min_price,
-      min_price_currency
+      min_price_venta,
+      min_price_venta_currency,
+      min_price_alquiler,
+      min_price_alquiler_currency
     FROM stats_cache
     WHERE tenant_id = ${tenantId}
       AND category = 'sector'
@@ -1232,8 +1236,10 @@ export async function getLocationStats(tenantId: string) {
       count_venta,
       count_alquiler,
       parent_slug,
-      min_price,
-      min_price_currency
+      min_price_venta,
+      min_price_venta_currency,
+      min_price_alquiler,
+      min_price_alquiler_currency
     FROM stats_cache
     WHERE tenant_id = ${tenantId}
       AND category = 'provincia'

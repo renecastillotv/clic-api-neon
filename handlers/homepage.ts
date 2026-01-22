@@ -175,6 +175,7 @@ export async function handleHomepage(options: {
     hotItems: {
       // Usar locationStats con datos enriquecidos (imagen, count_venta, count_alquiler)
       // Campos compatibles con PopularLocations.astro: title, url, image, property_count
+      // min_price separado por venta/alquiler, normalizado a USD
       cities: locationStats.cities.slice(0, 8).map((c: any) => ({
         slug: c.slug,
         title: c.name,          // PopularLocations usa title
@@ -186,8 +187,10 @@ export async function handleHomepage(options: {
         count_venta: parseInt(c.count_venta || '0', 10),
         count_alquiler: parseInt(c.count_alquiler || '0', 10),
         parent_slug: c.parent_slug || null,
-        min_price: c.min_price ? parseFloat(c.min_price) : null,
-        min_price_currency: c.min_price_currency || 'USD'
+        min_price_venta: c.min_price_venta ? parseFloat(c.min_price_venta) : null,
+        min_price_venta_currency: c.min_price_venta_currency || 'USD',
+        min_price_alquiler: c.min_price_alquiler ? parseFloat(c.min_price_alquiler) : null,
+        min_price_alquiler_currency: c.min_price_alquiler_currency || 'USD'
       })),
       sectors: locationStats.sectors.slice(0, 12).map((s: any) => ({
         slug: s.slug,
@@ -200,8 +203,10 @@ export async function handleHomepage(options: {
         count_venta: parseInt(s.count_venta || '0', 10),
         count_alquiler: parseInt(s.count_alquiler || '0', 10),
         parent_slug: s.parent_slug || null,
-        min_price: s.min_price ? parseFloat(s.min_price) : null,
-        min_price_currency: s.min_price_currency || 'USD'
+        min_price_venta: s.min_price_venta ? parseFloat(s.min_price_venta) : null,
+        min_price_venta_currency: s.min_price_venta_currency || 'USD',
+        min_price_alquiler: s.min_price_alquiler ? parseFloat(s.min_price_alquiler) : null,
+        min_price_alquiler_currency: s.min_price_alquiler_currency || 'USD'
       })),
       properties: properties.slice(0, 6),
       agents: advisors.slice(0, 4).map((a: any) => ({
