@@ -120,31 +120,46 @@ export async function handleHomepage(options: {
       }
     },
     relatedContent: {
-      articles: realArticles.slice(0, 4).map((a: any) => {
+      // Formato compatible con RelatedArticles.astro
+      articles: realArticles.slice(0, 6).map((a: any) => {
         const fallbackAvatar = tenant.branding?.isotipo_url || tenant.branding?.logo_url || '/images/team/clic-experts.jpg';
         return {
           id: a.id,
           slug: a.slug,
+          url: a.url,
           title: a.title,
-          excerpt: a.excerpt,
-          image: a.featuredImage,
-          category: a.category?.name || '',
-          published_at: a.publishedAt,
-          author: a.author?.name || 'Equipo CLIC',
-          author_avatar: a.author?.avatar || fallbackAvatar,
-          url: a.url
+          excerpt: a.excerpt || '',
+          featuredImage: a.featuredImage || a.image || null,
+          author: {
+            name: a.author?.name || 'Equipo CLIC',
+            avatar: a.author?.avatar || fallbackAvatar
+          },
+          publishedAt: a.publishedAt || new Date().toISOString(),
+          readTime: a.readTime || a.read_time || '5 min',
+          category: a.category?.name || a.categoryName || 'General',
+          views: a.views || 0,
+          featured: a.featured || false,
+          total_weight: a.total_weight || 0,
+          content_priority: a.content_priority || 'default',
+          sort_order: a.sort_order || 0
         };
       }),
-      videos: realVideos.slice(0, 3).map((v: any) => ({
+      // Formato compatible con VideoGallery.astro
+      videos: realVideos.slice(0, 6).map((v: any) => ({
         id: v.id,
-        slug: v.slug,
         title: v.title,
+        description: v.description || '',
         thumbnail: v.thumbnail,
-        youtube_id: v.videoId,
-        duration: v.durationFormatted,
-        views: v.views,
-        published_at: v.publishedAt,
-        url: v.url
+        videoId: v.videoId,
+        videoSlug: v.slug,
+        duration: v.durationFormatted || v.duration || '0:00',
+        views: v.views || 0,
+        category: v.category?.name || v.categoryName || 'General',
+        url: v.url,
+        featured: v.featured || false,
+        total_weight: v.total_weight || 0,
+        content_priority: v.content_priority || 'default',
+        sort_order: v.sort_order || 0
       })),
       testimonials: utils.formatTestimonials(testimonials, language, { trackingString }),
       // FAQs removidos de aquí - ya están en sections para evitar duplicación
@@ -529,29 +544,45 @@ function buildHomepageSections(
   }
 
   // Content Mix - Videos y Artículos reales de la base de datos
-  const formattedVideos = realVideos.slice(0, 3).map((v: any) => ({
+  // Formato compatible con VideoGallery.astro
+  const formattedVideos = realVideos.slice(0, 6).map((v: any) => ({
     id: v.id,
     title: v.title,
+    description: v.description || '',
     thumbnail: v.thumbnail,
-    youtube_id: v.videoId,
-    duration: v.durationFormatted,
-    views: v.views,
-    published_at: v.publishedAt,
-    url: v.url
+    videoId: v.videoId,           // VideoGallery espera videoId
+    videoSlug: v.slug,            // VideoGallery espera videoSlug
+    duration: v.durationFormatted || v.duration || '0:00',
+    views: v.views || 0,
+    category: v.category?.name || v.categoryName || 'General',  // VideoGallery espera category
+    url: v.url,
+    featured: v.featured || false,
+    total_weight: v.total_weight || 0,
+    content_priority: v.content_priority || 'default',
+    sort_order: v.sort_order || 0
   }));
 
+  // Formato compatible con RelatedArticles.astro
   const fallbackAvatar = tenant.branding?.isotipo_url || tenant.branding?.logo_url || '/images/team/clic-experts.jpg';
-  const formattedArticles = realArticles.slice(0, 4).map((a: any) => ({
+  const formattedArticles = realArticles.slice(0, 6).map((a: any) => ({
     id: a.id,
-    title: a.title,
-    excerpt: a.excerpt,
-    image: a.featuredImage,
     slug: a.slug,
-    category: a.category?.name || '',
-    published_at: a.publishedAt,
-    author: a.author?.name || 'Equipo CLIC',
-    author_avatar: a.author?.avatar || fallbackAvatar,
-    url: a.url
+    url: a.url,
+    title: a.title,
+    excerpt: a.excerpt || '',
+    featuredImage: a.featuredImage || a.image || null,  // RelatedArticles espera featuredImage
+    author: {                                            // RelatedArticles espera objeto author
+      name: a.author?.name || 'Equipo CLIC',
+      avatar: a.author?.avatar || fallbackAvatar
+    },
+    publishedAt: a.publishedAt || new Date().toISOString(),  // RelatedArticles espera publishedAt
+    readTime: a.readTime || a.read_time || '5 min',          // RelatedArticles espera readTime
+    category: a.category?.name || a.categoryName || 'General',
+    views: a.views || 0,
+    featured: a.featured || false,
+    total_weight: a.total_weight || 0,
+    content_priority: a.content_priority || 'default',
+    sort_order: a.sort_order || 0
   }));
 
   sections.push({
