@@ -185,7 +185,9 @@ export async function handleHomepage(options: {
         count: parseInt(c.count, 10),
         count_venta: parseInt(c.count_venta || '0', 10),
         count_alquiler: parseInt(c.count_alquiler || '0', 10),
-        parent_slug: c.parent_slug || null
+        parent_slug: c.parent_slug || null,
+        min_price: c.min_price ? parseFloat(c.min_price) : null,
+        min_price_currency: c.min_price_currency || 'USD'
       })),
       sectors: locationStats.sectors.slice(0, 12).map((s: any) => ({
         slug: s.slug,
@@ -197,7 +199,9 @@ export async function handleHomepage(options: {
         count: parseInt(s.count, 10),
         count_venta: parseInt(s.count_venta || '0', 10),
         count_alquiler: parseInt(s.count_alquiler || '0', 10),
-        parent_slug: s.parent_slug || null
+        parent_slug: s.parent_slug || null,
+        min_price: s.min_price ? parseFloat(s.min_price) : null,
+        min_price_currency: s.min_price_currency || 'USD'
       })),
       properties: properties.slice(0, 6),
       agents: advisors.slice(0, 4).map((a: any) => ({

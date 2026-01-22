@@ -1195,7 +1195,9 @@ export async function getLocationStats(tenantId: string) {
       count,
       count_venta,
       count_alquiler,
-      parent_slug
+      parent_slug,
+      min_price,
+      min_price_currency
     FROM stats_cache
     WHERE tenant_id = ${tenantId}
       AND category = 'ciudad'
@@ -1211,7 +1213,9 @@ export async function getLocationStats(tenantId: string) {
       count,
       count_venta,
       count_alquiler,
-      parent_slug
+      parent_slug,
+      min_price,
+      min_price_currency
     FROM stats_cache
     WHERE tenant_id = ${tenantId}
       AND category = 'sector'
@@ -1227,7 +1231,9 @@ export async function getLocationStats(tenantId: string) {
       count,
       count_venta,
       count_alquiler,
-      parent_slug
+      parent_slug,
+      min_price,
+      min_price_currency
     FROM stats_cache
     WHERE tenant_id = ${tenantId}
       AND category = 'provincia'
