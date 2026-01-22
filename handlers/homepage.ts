@@ -9,6 +9,36 @@ import articlesHandler from './articles';
 import type { TenantConfig } from '../types';
 
 // ============================================================================
+// HELPER: Limpiar HTML de texto
+// ============================================================================
+
+/**
+ * Elimina tags HTML de un string y limpia espacios
+ */
+function stripHtml(html: string | null | undefined): string {
+  if (!html) return '';
+
+  return html
+    // Reemplazar <br>, <br/>, <br /> con espacio
+    .replace(/<br\s*\/?>/gi, ' ')
+    // Reemplazar </p><p> con espacio (nuevo párrafo)
+    .replace(/<\/p>\s*<p>/gi, ' ')
+    // Eliminar todos los demás tags HTML
+    .replace(/<[^>]*>/g, '')
+    // Decodificar entidades HTML comunes
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    // Limpiar múltiples espacios
+    .replace(/\s+/g, ' ')
+    // Eliminar espacios al inicio y final
+    .trim();
+}
+
+// ============================================================================
 // HANDLER: Homepage (Formato Supabase)
 // ============================================================================
 
@@ -148,7 +178,7 @@ export async function handleHomepage(options: {
       videos: realVideos.slice(0, 6).map((v: any) => ({
         id: v.id,
         title: v.title,
-        description: v.description || '',
+        description: stripHtml(v.description),
         thumbnail: v.thumbnail,
         videoId: v.videoId,
         videoSlug: v.slug,
@@ -548,7 +578,7 @@ function buildHomepageSections(
   const formattedVideos = realVideos.slice(0, 6).map((v: any) => ({
     id: v.id,
     title: v.title,
-    description: v.description || '',
+    description: stripHtml(v.description),  // Limpiar HTML de la descripción
     thumbnail: v.thumbnail,
     videoId: v.videoId,           // VideoGallery espera videoId
     videoSlug: v.slug,            // VideoGallery espera videoSlug
