@@ -18,6 +18,7 @@ import proposalsHandler from '../handlers/proposals';
 import contactHandler from '../handlers/contact';
 import propertyTypesHandler from '../handlers/propertyTypes';
 import locationsHandler from '../handlers/locations';
+import leadsHandler from '../handlers/leads';
 
 import type { TenantConfig, ApiResponse, Error404Response } from '../types';
 
@@ -136,6 +137,12 @@ export default async function handler(request: Request): Promise<Response> {
     if (pathname.startsWith('/api/proposals') || pathname.startsWith('/proposals')) {
       console.log(`[API] Proposals route: ${pathname}`);
       return proposalsHandler.handleProposals(request);
+    }
+
+    // Ruta de leads: POST /api/leads
+    if (pathname === '/api/leads' && request.method === 'POST') {
+      console.log(`[API] Leads submission route`);
+      return handleLeadSubmission(request);
     }
 
     const searchParams = url.searchParams;
@@ -987,4 +994,97 @@ function buildCountryConfig(tenant: TenantConfig): any {
       available: ['USD', 'DOP']
     }
   };
+}
+
+// ============================================================================
+// LEAD SUBMISSION HANDLER
+// ============================================================================
+
+async function handleLeadSubmission(request: Request): Promise<Response> {
+  try {
+    // Parse request body
+    const body = await request.json();
+
+    console.log('[API] Lead submission received:', {
+      hasNombre: !!body.cliente_nombre,
+      hasEmail: !!body.cliente_email,
+      hasTelefono: !!body.cliente_telefono,
+      hasPropertyId: !!body.propiedad_id,
+    });
+
+    // Get domain from header or body
+    const url = new URL(request.url);
+    const domain = request.headers.get('x-original-host') ||
+                   url.searchParams.get('domain') ||
+                   body.domain ||
+                   url.host;
+
+    // Get tenant
+    const tenant = await getTenantConfig(domain);
+
+    if (!tenant) {
+      return new Response(JSON.stringify({
+        success: false,
+        error: 'Tenant no encontrado'
+      }), {
+        status: 400,
+        headers: {
+          'Content-Type': 'application/json',
+          ...corsHeaders,
+        },
+      });
+    }
+
+    // Get client IP from headers
+    const clientIP = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
+                     request.headers.get('x-real-ip') ||
+                     request.headers.get('cf-connecting-ip') ||
+                     '';
+
+    // Submit lead
+    const result = await leadsHandler.submitLead({
+      tenantId: tenant.id,
+      leadData: body,
+      clientIP,
+    });
+
+    if (!result.success) {
+      return new Response(JSON.stringify({
+        success: false,
+        error: result.error || 'Error al enviar la solicitud'
+      }), {
+        status: 400,
+        headers: {
+          'Content-Type': 'application/json',
+          ...corsHeaders,
+        },
+      });
+    }
+
+    return new Response(JSON.stringify({
+      success: true,
+      message: 'Solicitud enviada correctamente',
+      leadId: result.leadId,
+    }), {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/json',
+        ...corsHeaders,
+      },
+    });
+
+  } catch (error: any) {
+    console.error('[API] Lead submission error:', error);
+
+    return new Response(JSON.stringify({
+      success: false,
+      error: 'Error interno del servidor'
+    }), {
+      status: 500,
+      headers: {
+        'Content-Type': 'application/json',
+        ...corsHeaders,
+      },
+    });
+  }
 }
