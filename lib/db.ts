@@ -1021,7 +1021,6 @@ export async function getRecentArticles(tenantId: string, limit: number = 4) {
     LEFT JOIN categorias_contenido cc ON a.categoria_id = cc.id
     WHERE a.tenant_id = ${tenantId}
       AND a.publicado = true
-      AND (a.estado IS NULL OR a.estado = 'publicado')
     ORDER BY a.created_at DESC
     LIMIT ${limit}
   `;
