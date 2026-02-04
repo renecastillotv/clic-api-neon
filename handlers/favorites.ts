@@ -2,6 +2,7 @@
 // Handler para sistema de favoritos con compartir y reacciones
 
 import { getSQL } from '../lib/db';
+import * as utils from '../lib/utils';
 
 // ============================================================================
 // TIPOS
