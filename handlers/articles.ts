@@ -282,6 +282,7 @@ async function handleArticlesMain(options: {
       LEFT JOIN perfiles_asesor pa ON u.id = pa.usuario_id AND pa.tenant_id = a.tenant_id
       WHERE a.tenant_id = ${tenant.id}
         AND a.publicado = true
+        AND (a.estado IS NULL OR a.estado = 'publicado')
         AND a.destacado = true
       ORDER BY a.fecha_publicacion DESC NULLS LAST
       LIMIT 6
@@ -317,6 +318,7 @@ async function handleArticlesMain(options: {
       LEFT JOIN perfiles_asesor pa ON u.id = pa.usuario_id AND pa.tenant_id = a.tenant_id
       WHERE a.tenant_id = ${tenant.id}
         AND a.publicado = true
+        AND (a.estado IS NULL OR a.estado = 'publicado')
       ORDER BY a.destacado DESC, a.fecha_publicacion DESC NULLS LAST
       LIMIT ${limit} OFFSET ${offset}
     `;
@@ -335,6 +337,7 @@ async function handleArticlesMain(options: {
           FROM articulos a
           WHERE a.categoria_id = cc.id
             AND a.publicado = true
+            AND (a.estado IS NULL OR a.estado = 'publicado')
             AND a.tenant_id = ${tenant.id}
         ), 0) as article_count
       FROM categorias_contenido cc
@@ -354,6 +357,7 @@ async function handleArticlesMain(options: {
       FROM articulos
       WHERE tenant_id = ${tenant.id}
         AND publicado = true
+        AND (estado IS NULL OR estado = 'publicado')
     `;
 
     // Query: Total para paginación
@@ -362,6 +366,7 @@ async function handleArticlesMain(options: {
       FROM articulos
       WHERE tenant_id = ${tenant.id}
         AND publicado = true
+        AND (estado IS NULL OR estado = 'publicado')
     `;
 
     // Procesar artículos destacados
@@ -396,6 +401,7 @@ async function handleArticlesMain(options: {
       FROM articulos
       WHERE tenant_id = ${tenant.id}
         AND publicado = true
+        AND (estado IS NULL OR estado = 'publicado')
         AND categoria_id IS NULL
     `;
     const uncategorizedCount = parseInt((uncategorizedResult as any[])[0]?.count || '0', 10);
@@ -516,6 +522,7 @@ async function handleArticlesCategory(options: {
       FROM articulos
       WHERE tenant_id = ${tenant.id}
         AND publicado = true
+        AND (estado IS NULL OR estado = 'publicado')
         AND categoria_id IS NULL
     `;
     totalArticles = parseInt((countResult as any[])[0]?.total || '0', 10);
@@ -565,6 +572,7 @@ async function handleArticlesCategory(options: {
       LEFT JOIN perfiles_asesor pa ON u.id = pa.usuario_id AND pa.tenant_id = a.tenant_id
       WHERE a.tenant_id = ${tenant.id}
         AND a.publicado = true
+        AND (a.estado IS NULL OR a.estado = 'publicado')
         AND a.categoria_id IS NULL
       ORDER BY a.destacado DESC, a.fecha_publicacion DESC NULLS LAST
       LIMIT ${limit} OFFSET ${offset}
@@ -631,6 +639,7 @@ async function handleArticlesCategory(options: {
       WHERE a.tenant_id = ${tenant.id}
         AND a.categoria_id = ${categoryData.id}
         AND a.publicado = true
+        AND (a.estado IS NULL OR a.estado = 'publicado')
       ORDER BY a.destacado DESC, a.fecha_publicacion DESC NULLS LAST
       LIMIT ${limit} OFFSET ${offset}
     ` as any[];
@@ -642,6 +651,7 @@ async function handleArticlesCategory(options: {
       WHERE tenant_id = ${tenant.id}
         AND categoria_id = ${categoryData.id}
         AND publicado = true
+        AND (estado IS NULL OR estado = 'publicado')
     `;
     totalArticles = parseInt((countResult as any[])[0]?.total || '0', 10);
   }
@@ -734,6 +744,7 @@ async function handleSingleArticle(options: {
     WHERE a.tenant_id = ${tenant.id}
       AND a.slug = ${articleSlug}
       AND a.publicado = true
+      AND (a.estado IS NULL OR a.estado = 'publicado')
     LIMIT 1
   `;
 
@@ -786,6 +797,7 @@ async function handleSingleArticle(options: {
     LEFT JOIN perfiles_asesor pa ON u.id = pa.usuario_id AND pa.tenant_id = a.tenant_id
     WHERE a.tenant_id = ${tenant.id}
       AND a.publicado = true
+      AND (a.estado IS NULL OR a.estado = 'publicado')
       AND a.id != ${articleData.id}
     ORDER BY
       CASE WHEN a.categoria_id = ${articleData.categoria_id} THEN 0 ELSE 1 END,
