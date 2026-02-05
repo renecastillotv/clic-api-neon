@@ -1,9 +1,12 @@
 {
   "name": "clic-api-neon",
   "version": "1.0.0",
-  "description": "API para CRM Inmobiliario - Vercel Edge Functions con Neon PostgreSQL",
+  "description": "API para CRM Inmobiliario con Neon PostgreSQL",
   "type": "module",
   "scripts": {
+    "build": "esbuild server.ts --bundle --platform=node --outfile=dist/server.mjs --format=esm --packages=external",
+    "start": "node dist/server.mjs",
+    "dev": "node --experimental-strip-types --watch server.ts",
     "test": "node --experimental-strip-types test.ts"
   },
   "dependencies": {
@@ -12,9 +15,10 @@
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
+    "esbuild": "^0.27.2",
     "typescript": "^5.0.0"
   },
   "engines": {
-    "node": "20.x"
+    "node": ">=20.x"
   }
 }
